@@ -42,5 +42,10 @@ mkdir -p src/raw-data && ZIP_PATH=./src/raw-data/swire_dataset.zip && wget https
 
 Download via cli:
 ```bash
-mkdir -p src/raw-data/rico && TAR_PATH=./src/raw-data/rico/rico_dataset.tar.gz && wget https://storage.googleapis.com/crowdstf-rico-uiuc-4540/rico_dataset_v0.1/unique_uis.tar.gz -O ${TAR_PATH} && tar -xzf ${TAR_PATH} -C src/raw-data/rico --strip-components=1 && rm ${TAR_PATH} && cd src/raw-data/rico && rm *.json
+mkdir -p src/raw-data/rico && TAR_PATH=./src/raw-data/rico/rico_dataset.tar.gz && wget https://storage.googleapis.com/crowdstf-rico-uiuc-4540/rico_dataset_v0.1/unique_uis.tar.gz -O ${TAR_PATH} && tar -xzf ${TAR_PATH} -C src/raw-data/rico --strip-components=1 && rm ${TAR_PATH}
+# We don't need the json files
+# Removing in Linux
+cd src/raw-data/rico && rm *.json
+# Mac OS
+cd src/raw-data/rico && find . -name "*.json" -type f -delete
 ```

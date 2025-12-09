@@ -11,7 +11,7 @@ import math
 import random
 
 # --- CONFIGURATION ---
-NUM_CPUS = 10
+NUM_CPUS = -1
 current_directory = os.path.dirname(os.path.abspath(__file__))
 MUD_ROOT = os.path.join(current_directory, "../raw-data/mud") # Folder containing .jpg / .png
 

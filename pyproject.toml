@@ -7,8 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "accelerate>=1.12.0",
     "albumentations>=2.0.8",
+    "gdown>=5.2.0",
     "gradio>=6.0.1",
     "ipykernel>=7.1.0",
+    "joblib>=1.5.2",
     "logging>=0.4.9.6",
     "matplotlib>=3.10.7",
     "numpy>=2.3.5",
@@ -19,4 +21,5 @@ dependencies = [
     "torchvision>=0.24.1",
     "tqdm>=4.67.1",
     "transformers>=4.57.3",
+    "unzip>=1.0.0",
 ]
