@@ -1,21 +1,21 @@
 import os
 import json
 import re
-import cv2
 import numpy as np
+import cv2
 import albumentations as A
 from PIL import Image
 from tqdm import tqdm
+from joblib import Parallel, delayed
 import math
 import random
 
 # --- CONFIGURATION ---
+NUM_CPUS = 10
 current_directory = os.path.dirname(os.path.abspath(__file__))
-FILES_ROOT = "/Users/matheus/Downloads" # Update this to your MUD dataset location
-MUD_ROOT = os.path.join(FILES_ROOT, "mud-dataset") # Folder containing .jpg / .png
+MUD_ROOT = os.path.join(current_directory, "../raw-data/mud") # Folder containing .jpg / .png
 
-OUTPUT_DIR = os.path.join(current_directory, "mud_outputs")
-OUTPUT_DIR_X = os.path.join(OUTPUT_DIR, "train_X_sketches")
+OUTPUT_DIR_X = os.path.join(current_directory, "../transformed-data/mud")
 os.makedirs(OUTPUT_DIR_X, exist_ok=True)
 
 # --- DRAWING UTILS ---
@@ -352,70 +352,79 @@ def get_valid_input_datum(sample_id, verbose=False):
       print(f"Error processing Sample ID {sample_id}: {e}")
     return (False, None)
 
-def get_valid_input_data(sample_size=None):
-  files = all_json_files
-  if sample_size:
-    files = all_json_files[:sample_size]
-  
-  print("--- FILTERING VALID INPUT DATA ---")
-  valid_files = []
-  for file in tqdm(files):
-    sample_id = file.replace(".json", "")
+def validate_single_file(file_name):
+    sample_id = file_name.replace(".json", "")
     (valid, semantic_data) = get_valid_input_datum(sample_id, verbose=False)
+    
     if valid:
-      valid_files.append({ "id": sample_id, "data": semantic_data})
+        return { "id": sample_id, "data": semantic_data }
+    return None
+
+def get_valid_input_data(sample_size=None):
+    files = all_json_files
+    if sample_size:
+        files = all_json_files[:sample_size]
   
-  print(f"{len(valid_files)} valid files.")
-  return valid_files
+    print(f"--- FILTERING VALID INPUT DATA (PARALLEL - {len(files)} files) ---")
+    valid_files = []
+    results = Parallel(n_jobs=NUM_CPUS)(
+        delayed(validate_single_file)(f) for f in tqdm(files, desc="Validating & Loading JSONs")
+    )
+
+    valid_files = [res for res in results if res is not None]
+
+    print(f"✅ {len(valid_files)} valid files loaded.")
+    return valid_files
+
+def process_single_item(item):
+    sample_id = item['id']
+    mud_data = item['data']
+
+    try:
+        # Dimensions from JSON
+        width = int(mud_data.get('width', 1080))
+        height = int(mud_data.get('height', 1920))
+        
+        # Create blank canvas (Black background)
+        output_canvas = np.zeros((height, width, 3), dtype=np.uint8)
+        
+        # MUD 'views' is a flat list. Usually index 0 is the root.
+        # We pass the list and the starting index.
+        views_list = mud_data['views']
+        if views_list:
+            traverse_and_draw(0, views_list, output_canvas)
+
+        # Albumentations (Humanize)
+        (alpha, sigma) = (random.randint(500, 600), random.randint(20, 30))
+        transform_humanize = get_noisy_transformer(alpha, sigma)
+        augmented = transform_humanize(image=output_canvas)
+        canvas_with_noise = augmented['image']
+
+        output_path_x = os.path.join(OUTPUT_DIR_X, f"{sample_id}.png")
+        Image.fromarray(canvas_with_noise).save(output_path_x)
+        
+        return True
+
+    except Exception as e:
+        return False
 
 
 # --- MAIN EXECUTION ---
-
 def main():
 
     filtered_data = get_valid_input_data()
 
     # Process a batch
-    SAMPLE_BATCH_SIZE = min(100, len(filtered_data))
+    SAMPLE_BATCH_SIZE = min(7000, len(filtered_data))
     input_batch = random.sample(filtered_data, SAMPLE_BATCH_SIZE)
 
-    print("--- PROCESSING DATA BATCH ---")
-    processed_count = 0
-    skipped_count = 0
+    print(f"--- PROCESSING {len(input_batch)} DATA ITEMS IN PARALLEL ---")
+    results = Parallel(n_jobs=NUM_CPUS, verbose=0)(
+        delayed(process_single_item)(item) for item in tqdm(input_batch, desc="Processing Items")
+    )
 
-    for item in tqdm(input_batch):
-        try:
-            sample_id = item['id']
-            mud_data = item['data']
-            
-            # Dimensions from JSON
-            width = int(mud_data.get('width', 1080))
-            height = int(mud_data.get('height', 1920))
-            
-            # Create blank canvas (Black background)
-            output_canvas = np.zeros((height, width, 3), dtype=np.uint8)
-            
-            # MUD 'views' is a flat list. Usually index 0 is the root.
-            # We pass the list and the starting index.
-            views_list = mud_data['views']
-            if views_list:
-                traverse_and_draw(0, views_list, output_canvas)
-
-            # Albumentations (Humanize)
-            (alpha, sigma) = (random.randint(500, 600), random.randint(20, 30))
-            transform_humanize = get_noisy_transformer(alpha, sigma)
-            augmented = transform_humanize(image=output_canvas)
-            canvas_with_noise = augmented['image']
-
-            output_path_x = os.path.join(OUTPUT_DIR_X, f"{sample_id}.png")
-            Image.fromarray(canvas_with_noise).save(output_path_x)
-
-            processed_count += 1
-
-        except Exception as e:
-            print(f"Error processing {sample_id}: {e}")
-            skipped_count += 1
-            continue
+    processed_count = sum(results)
+    skipped_count = len(input_batch) - processed_count
 
     print("\n--- DATA BATCH PROCESSING CONCLUDED ---")
     print(f"✅ Successfully processed: {processed_count}")
