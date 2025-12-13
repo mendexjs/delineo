@@ -150,7 +150,7 @@ class BaseModel(torch.nn.Module):
                 dtype=dtype,
             )
 
-    def apply_model(self, x, sigma, c_crossattn=None, y=None, skip_layers=[], controlnet_cond=None):
+    def apply_model(self, x, sigma, c_crossattn=None, y=None, skip_layers=[], controlnet_cond=None, controlnet_strength=1.0):
         dtype = self.get_dtype()
         timestep = self.model_sampling.timestep(sigma).float()
         controlnet_hidden_states = None
@@ -169,6 +169,10 @@ class BaseModel(torch.nn.Module):
             controlnet_hidden_states = self.control_model(
                 x_controlnet, controlnet_cond, y_cond, 1, sigma.to(torch.float32)
             )
+            # apply the strength
+            if controlnet_strength != 1.0:
+                controlnet_hidden_states = [c * controlnet_strength for c in controlnet_hidden_states]
+
         model_output = self.diffusion_model(
             x.to(dtype),
             timestep,

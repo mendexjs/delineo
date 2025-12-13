@@ -349,6 +349,7 @@ class SD3Inferencer:
         controlnet_cond=None,
         denoise=1.0,
         skip_layer_config={},
+        controlnet_strength=1.0,
     ) -> torch.Tensor:
         self.print("Sampling...")
         latent = latent.half().cuda()
@@ -363,6 +364,7 @@ class SD3Inferencer:
             "uncond": neg_cond,
             "cond_scale": cfg_scale,
             "controlnet_cond": controlnet_cond,
+            "controlnet_strength": controlnet_strength,
         }
         noise_scaled = self.sd3.model.model_sampling.noise_scaling(
             sigmas[0], noise, latent, self.max_denoise(sigmas)
@@ -454,6 +456,7 @@ class SD3Inferencer:
         init_image=INIT_IMAGE,
         denoise=DENOISE,
         skip_layer_config={},
+        controlnet_strength=1.0
     ):
         controlnet_cond = None
         if init_image:
@@ -491,6 +494,7 @@ class SD3Inferencer:
                 controlnet_cond,
                 denoise if init_image else 1.0,
                 skip_layer_config,
+                controlnet_strength=controlnet_strength,
             )
             image = self.vae_decode(sampled_latent)
             save_path = os.path.join(out_dir, f"{i:06d}.png")
@@ -570,6 +574,7 @@ def main(
     verbose=False,
     model_folder=MODEL_FOLDER,
     text_encoder_device="cpu",
+    controlnet_strength=1.0,
     **kwargs,
 ):
     assert not kwargs, f"Unknown arguments: {kwargs}"
@@ -647,6 +652,7 @@ def main(
         init_image,
         denoise,
         skip_layer_config,
+        controlnet_strength=controlnet_strength,
     )
 
 
