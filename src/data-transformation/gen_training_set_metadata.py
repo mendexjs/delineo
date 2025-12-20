@@ -33,9 +33,9 @@ def process_mud(mud_dir, valid_pairs):
         if output_path.exists():
             # Store relative paths (e.g., "mud/123_input.png")
             valid_pairs.append({
-                "image": f"mud/{output_filename}", # TARGET (MUD UI)
-                "sketch": f"mud/{filename}",       # INPUT (Programmatically generated sketch)
-                "prompt": PROMPT
+                "input_file_name": f"mud/{filename}",       # INPUT (Programmatically generated sketch)
+                "output_file_name": f"mud/{output_filename}", # TARGET (MUD UI)
+                "text": PROMPT
             })
 
 def process_swire(swire_dir, valid_pairs):
@@ -63,9 +63,9 @@ def process_swire(swire_dir, valid_pairs):
         
         if output_path.exists():
             valid_pairs.append({
-                "image": f"swire/{output_filename}", # TARGET (Rico UI)
-                "sketch": f"swire/{filename}",       # INPUT (Swire human sketch)
-                "prompt": PROMPT
+                "input_file_name": f"swire/{filename}",       # INPUT (Swire human sketch)
+                "output_file_name": f"swire/{output_filename}", # TARGET (Rico UI)
+                "text": PROMPT
             })
 
 def main():

@@ -41,6 +41,7 @@ from huggingface_hub import create_repo, upload_folder
 from packaging import version
 from PIL import Image
 from torchvision import transforms
+import torchvision.transforms.functional as TF
 from tqdm.auto import tqdm
 from transformers import CLIPTokenizer, PretrainedConfig, T5TokenizerFast
 
@@ -697,7 +698,6 @@ def make_train_dataset(args, tokenizer_one, tokenizer_two, tokenizer_three, acce
             dataset = load_dataset(
                 args.train_data_dir,
                 cache_dir=args.cache_dir,
-                trust_remote_code=True,
             )
         # See more about loading custom images at
         # https://huggingface.co/docs/datasets/v2.0.0/en/dataset_script
@@ -753,32 +753,72 @@ def make_train_dataset(args, tokenizer_one, tokenizer_two, tokenizer_three, acce
                 )
         return captions
 
-    image_transforms = transforms.Compose(
-        [
-            transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.CenterCrop(args.resolution),
-            transforms.ToTensor(),
-            transforms.Normalize([0.5], [0.5]),
-        ]
-    )
+    # image_transforms = transforms.Compose(
+    #     [
+    #         transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
+    #         transforms.CenterCrop(args.resolution),
+    #         transforms.ToTensor(),
+    #         transforms.Normalize([0.5], [0.5]),
+    #     ]
+    # )
 
-    conditioning_image_transforms = transforms.Compose(
-        [
-            transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.CenterCrop(args.resolution),
-            transforms.ToTensor(),
-        ]
-    )
+    # conditioning_image_transforms = transforms.Compose(
+    #     [
+    #         transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
+    #         transforms.CenterCrop(args.resolution),
+    #         transforms.ToTensor(),
+    #     ]
+    # )
+
+    # def preprocess_train(examples):
+    #     images = [image.convert("RGB") for image in examples[image_column]]
+    #     images = [image_transforms(image) for image in images]
+
+    #     conditioning_images = [image.convert("RGB") for image in examples[conditioning_image_column]]
+    #     conditioning_images = [conditioning_image_transforms(image) for image in conditioning_images]
+
+    #     examples["pixel_values"] = images
+    #     examples["conditioning_pixel_values"] = conditioning_images
+    #     examples["prompts"] = process_captions(examples)
+
+    #     return examples
 
     def preprocess_train(examples):
+        # 1. Convert paths/images to RGB PIL Images
         images = [image.convert("RGB") for image in examples[image_column]]
-        images = [image_transforms(image) for image in images]
-
         conditioning_images = [image.convert("RGB") for image in examples[conditioning_image_column]]
-        conditioning_images = [conditioning_image_transforms(image) for image in conditioning_images]
+        
+        processed_images = []
+        processed_conds = []
 
-        examples["pixel_values"] = images
-        examples["conditioning_pixel_values"] = conditioning_images
+        for img, cond in zip(images, conditioning_images):
+            # A. Resize the Shortest Edge to args.resolution (e.g., 720 -> 1024)
+            # This maintains aspect ratio but ensures the image is big enough to crop.
+            img = TF.resize(img, args.resolution, interpolation=transforms.InterpolationMode.BILINEAR)
+            cond = TF.resize(cond, args.resolution, interpolation=transforms.InterpolationMode.NEAREST) 
+            # Note: We use NEAREST for cond to keep wireframe lines sharp!
+
+            # B. Generate Random Crop Parameters
+            # This gives us a random (top, left, height, width) box
+            y, x, h, w = transforms.RandomCrop.get_params(img, output_size=(args.resolution, args.resolution))
+
+            # C. Apply the SAME crop to both
+            img_crop = TF.crop(img, y, x, h, w)
+            cond_crop = TF.crop(cond, y, x, h, w)
+
+            # D. Convert to Tensor & Normalize
+            # Image: Normalize to [-1, 1] for SD3
+            img_tensor = TF.to_tensor(img_crop)
+            img_tensor = TF.normalize(img_tensor, [0.5], [0.5])
+            
+            # Condition: Just to Tensor [0, 1]
+            cond_tensor = TF.to_tensor(cond_crop)
+
+            processed_images.append(img_tensor)
+            processed_conds.append(cond_tensor)
+
+        examples["pixel_values"] = processed_images
+        examples["conditioning_pixel_values"] = processed_conds
         examples["prompts"] = process_captions(examples)
 
         return examples
@@ -1309,7 +1349,6 @@ def main(args):
                 noise = torch.randn_like(model_input)
                 bsz = model_input.shape[0]
                 # Sample a random timestep for each image
-                # for weighting schemes where we sample timesteps non-uniformly
                 u = compute_density_for_timestep_sampling(
                     weighting_scheme=args.weighting_scheme,
                     batch_size=bsz,
@@ -1321,7 +1360,6 @@ def main(args):
                 timesteps = noise_scheduler_copy.timesteps[indices].to(device=model_input.device)
 
                 # Add noise according to flow matching.
-                # zt = (1 - texp) * x + texp * z1
                 sigmas = get_sigmas(timesteps, n_dim=model_input.ndim, dtype=model_input.dtype)
                 noisy_model_input = (1.0 - sigmas) * model_input + sigmas * noise
 
@@ -1334,10 +1372,31 @@ def main(args):
                 controlnet_image = vae.encode(controlnet_image).latent_dist.sample()
                 controlnet_image = (controlnet_image - vae.config.shift_factor) * vae.config.scaling_factor
 
+                # ==============================================================================
+                # 🔥 FIX FOR SD3.5 LARGE: Handle 4D -> 3D Input AND Text Embeddings
+                # ==============================================================================
+                raw_controlnet = accelerator.unwrap_model(controlnet)
+                raw_transformer = accelerator.unwrap_model(transformer)
+
+                # 1. Handle Input Dimensions (4D -> 3D)
+                # If ControlNet has no pos_embed, use the Transformer's pos_embed
+                if hasattr(raw_controlnet, "pos_embed") and raw_controlnet.pos_embed is None:
+                    controlnet_noisy_input = raw_transformer.pos_embed(noisy_model_input)
+                else:
+                    controlnet_noisy_input = noisy_model_input
+
+                # 2. Handle Text Embeddings (Context)
+                # If ControlNet has no context_embedder, we MUST pass None for encoder_hidden_states
+                if hasattr(raw_controlnet, "context_embedder") and raw_controlnet.context_embedder is None:
+                     controlnet_prompt_embeds = None
+                else:
+                     controlnet_prompt_embeds = prompt_embeds
+                # ==============================================================================
+
                 control_block_res_samples = controlnet(
-                    hidden_states=noisy_model_input,
+                    hidden_states=controlnet_noisy_input,         # <--- Uses processed 3D input
                     timestep=timesteps,
-                    encoder_hidden_states=prompt_embeds,
+                    encoder_hidden_states=controlnet_prompt_embeds, # <--- Uses None if needed
                     pooled_projections=pooled_prompt_embeds,
                     controlnet_cond=controlnet_image,
                     return_dict=False,
