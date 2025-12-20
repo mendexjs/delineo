@@ -206,7 +206,8 @@ class VAE:
 ### Main inference logic
 #################################################################################################
 
-
+# MODEL FOLDER
+MODEL_FOLDER = "/scratch/models"
 # Note: Sigma shift value, publicly released models use 3.0
 SHIFT = 3.0
 # Naturally, adjust to the width/height of the model you have
@@ -227,7 +228,7 @@ SEEDTYPE = "rand"
 # Actual model file path
 # MODEL = "models/sd3_medium.safetensors"
 # MODEL = "models/sd3.5_large_turbo.safetensors"
-MODEL = "models/sd3.5_large.safetensors"
+MODEL = f"{MODEL_FOLDER}/sd3.5_large.safetensors"
 # VAE model file path, or set None to use the same model file
 VAEFile = None  # "models/sd3_vae.safetensors"
 # Optional init image file path
@@ -240,8 +241,6 @@ DENOISE = 0.8
 OUTDIR = "outputs"
 # SAMPLER
 SAMPLER = "dpmpp_2m"
-# MODEL FOLDER
-MODEL_FOLDER = "models"
 
 
 class SD3Inferencer:

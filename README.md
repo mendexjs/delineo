@@ -18,7 +18,7 @@ Create env from file: `conda env create -f conda-environment.yml`
 
 Download via cli:
 ```bash
-mkdir -p src/raw-data/mud && TAR_PATH=./src/raw-data/mud/mud_dataset.tar.gz && gdown 1cbTRT3ky_zTveb_NnNPLUO9ZGXHvCcUl -O ${TAR_PATH} && tar -xzf ${TAR_PATH} -C src/raw-data/mud --strip-components=1 && rm ${TAR_PATH}
+mkdir -p src/raw-data/mud && TAR_PATH=./src/raw-data/mud/mud_dataset.tar.gz && gdown 1cbTRT3ky_zTveb_NnNPLUO9ZGXHvCcUl -O ${TAR_PATH} && tar -xzf ${TAR_PATH} -C src/raw-data/mud --strip-components=1 && rm ${TAR_PATH} && rm src/raw-data/mud/._*
 ```
 
 # Swire Dataset

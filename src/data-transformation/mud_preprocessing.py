@@ -4,6 +4,7 @@ import re
 import numpy as np
 import cv2
 import albumentations as A
+from pathlib import Path
 from PIL import Image
 from tqdm import tqdm
 from joblib import Parallel, delayed
@@ -11,17 +12,30 @@ import math
 import random
 
 # --- CONFIGURATION ---
-NUM_CPUS = -1
+NUM_CPUS = -1 # All CPUs available
 current_directory = os.path.dirname(os.path.abspath(__file__))
-MUD_ROOT = os.path.join(current_directory, "../raw-data/mud") # Folder containing .jpg / .png
+MUD_ROOT = os.path.join(current_directory, "../raw-data/mud") # Folder containing .png and .json
 
-OUTPUT_DIR_X = os.path.join(current_directory, "../transformed-data/mud")
-os.makedirs(OUTPUT_DIR_X, exist_ok=True)
+OUTPUT_TRAIN_DIR = Path("/scratch/delineo_data/train/mud")
+OUTPUT_VALIDATION_DIR = Path("/scratch/delineo_data/validation")
+os.makedirs(OUTPUT_TRAIN_DIR, exist_ok=True)
+os.makedirs(OUTPUT_VALIDATION_DIR, exist_ok=True)
+
+VALIDATION_SAMPLES = (
+    '408',
+    '14976',
+)
 
 # --- DRAWING UTILS ---
 BG_COLOR = (0, 0, 0)
 CONTRAST_COLOR = (255, 255, 255)
 AVG_CHAR_WIDTH_PIXELS = 13
+MIN_SEMANTIC_ELEMENTS = 5
+MAX_SEMANTIC_ELEMENTS = 20 # Many elements were noticed to create noisy sketches
+
+# Target Resolution (9:16 Aspect Ratio safe for SD3.5)
+TARGET_WIDTH = 720
+TARGET_HEIGHT = 1280
 
 def get_class_suffix(node):
     full_class = node.get('class', '')
@@ -304,7 +318,6 @@ def get_noisy_transformer(alpha, sigma):
 # --- DATA PROCESSING ---
 
 all_json_files = [f for f in os.listdir(MUD_ROOT) if f.endswith('.json')]
-MIN_SEMANTIC_ELEMENTS = 3
 
 def count_flat_mapped_elements(all_views):
     mapped_count = 0
@@ -320,15 +333,9 @@ def count_flat_mapped_elements(all_views):
 
 def get_valid_input_datum(sample_id, verbose=False):
   json_path = os.path.join(MUD_ROOT, f"{sample_id}.json")
-  img_path_png = os.path.join(MUD_ROOT, f"{sample_id}.png")
 
   try:
     if not os.path.exists(json_path):
-      return (False, None)
-
-    if not os.path.exists(img_path_png):
-      if verbose: 
-        print(f"Image not found for {sample_id}")
       return (False, None)
 
     with open(json_path, 'r', encoding='utf-8') as f:
@@ -337,9 +344,9 @@ def get_valid_input_datum(sample_id, verbose=False):
     views_list = data['views']
 
     elements_count = count_flat_mapped_elements(views_list)
-    if elements_count < MIN_SEMANTIC_ELEMENTS:
+    if elements_count < MIN_SEMANTIC_ELEMENTS or elements_count > MAX_SEMANTIC_ELEMENTS:
       if verbose:
-        print(f"Sample ID {sample_id} skipped because has less than {MIN_SEMANTIC_ELEMENTS} mapped elements")
+        print(f"Sample ID {sample_id} skipped because has {elements_count} elements. Elements constraint is set between {MIN_SEMANTIC_ELEMENTS} and {MAX_SEMANTIC_ELEMENTS}")
       return (False, None)
     
     if check_forbidden_components_and_text(views_list, verbose):
@@ -354,6 +361,12 @@ def get_valid_input_datum(sample_id, verbose=False):
 
 def validate_single_file(file_name):
     sample_id = file_name.replace(".json", "")
+    img_path_png = os.path.join(MUD_ROOT, f"{sample_id}.png")
+    if not os.path.exists(img_path_png):
+      if verbose: 
+        print(f"Image not found for {sample_id}")
+      return (False, None)
+    
     (valid, semantic_data) = get_valid_input_datum(sample_id, verbose=False)
     
     if valid:
@@ -367,7 +380,7 @@ def get_valid_input_data(sample_size=None):
   
     print(f"--- FILTERING VALID INPUT DATA (PARALLEL - {len(files)} files) ---")
     valid_files = []
-    results = Parallel(n_jobs=NUM_CPUS)(
+    results = Parallel(n_jobs=NUM_CPUS, backend="loky")(
         delayed(validate_single_file)(f) for f in tqdm(files, desc="Validating & Loading JSONs")
     )
 
@@ -391,17 +404,29 @@ def process_single_item(item):
         # MUD 'views' is a flat list. Usually index 0 is the root.
         # We pass the list and the starting index.
         views_list = mud_data['views']
-        if views_list:
-            traverse_and_draw(0, views_list, output_canvas)
+        if not views_list:
+            return False
+        
+        traverse_and_draw(0, views_list, output_canvas)
+        resized_canvas = cv2.resize(output_canvas, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_NEAREST)
 
         # Albumentations (Humanize)
-        (alpha, sigma) = (random.randint(500, 600), random.randint(20, 30))
+        (alpha, sigma) = (random.randint(330, 400), random.randint(12, 20))
         transform_humanize = get_noisy_transformer(alpha, sigma)
-        augmented = transform_humanize(image=output_canvas)
+        augmented = transform_humanize(image=resized_canvas)
         canvas_with_noise = augmented['image']
 
-        output_path_x = os.path.join(OUTPUT_DIR_X, f"{sample_id}.png")
+        export_base_path = OUTPUT_VALIDATION_DIR if sample_id in VALIDATION_SAMPLES else OUTPUT_TRAIN_DIR
+        
+        # Export conditioning image (X)
+        output_path_x = os.path.join(export_base_path, f"{sample_id}_input.png")
         Image.fromarray(canvas_with_noise).save(output_path_x)
+
+        # Exporting target image (Y)
+        ui_img = cv2.imread(os.path.join(MUD_ROOT, f"{sample_id}.png"))
+        ui_resized = cv2.resize(ui_img, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_AREA)
+        output_path_y = os.path.join(export_base_path, f"{sample_id}_output.png")
+        cv2.imwrite(output_path_y, ui_resized)
         
         return True
 
