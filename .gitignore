@@ -3,3 +3,5 @@
 src/raw-data
 src/transformed-data
 **/logs
+**/experiments/**/*.png
+**/sd35-delineo-finetuned-*
