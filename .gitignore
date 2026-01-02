@@ -5,3 +5,6 @@ src/transformed-data
 **/logs
 **/experiments/**/*.png
 **/sd35-delineo-finetuned-*
+src/experiments/upload_checkpoint.py
+**/wandb
+notarycli

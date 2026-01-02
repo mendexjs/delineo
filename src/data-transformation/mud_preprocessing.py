@@ -5,11 +5,11 @@ import numpy as np
 import cv2
 import albumentations as A
 from pathlib import Path
-from PIL import Image
 from tqdm import tqdm
 from joblib import Parallel, delayed
 import math
 import random
+from utils import crop_bars_opencv, resize_contain
 
 # --- CONFIGURATION ---
 NUM_CPUS = -1 # All CPUs available
@@ -304,12 +304,12 @@ def traverse_and_draw(view_idx, all_views, canvas_array):
 
 def get_noisy_transformer(alpha, sigma):
   return A.Compose([
-    A.ElasticTransform(alpha=alpha, sigma=sigma, p=1.0, border_mode=cv2.BORDER_CONSTANT),
+    A.ElasticTransform(alpha=alpha, sigma=sigma, p=1, border_mode=cv2.BORDER_CONSTANT),
     A.Rotate(limit=0.5, p=0.7, border_mode=cv2.BORDER_CONSTANT),
     A.CoarseDropout(
-     num_holes_range=(5, 20),
+     num_holes_range=(3, 10),
      hole_height_range=(10, 30),
-     hole_width_range=(20, 50),
+     hole_width_range=(10, 40),
      fill="inpaint_ns",
      p=0.4
  )
@@ -394,43 +394,68 @@ def process_single_item(item):
     mud_data = item['data']
 
     try:
-        # Dimensions from JSON
-        width = int(mud_data.get('width', 1080))
-        height = int(mud_data.get('height', 1920))
+        # 1. Load & Validation
+        ui_img = cv2.imread(os.path.join(MUD_ROOT, f"{sample_id}.png"))
+        if ui_img is None: return False
         
-        # Create blank canvas (Black background)
-        output_canvas = np.zeros((height, width, 3), dtype=np.uint8)
-        
-        # MUD 'views' is a flat list. Usually index 0 is the root.
-        # We pass the list and the starting index.
-        views_list = mud_data['views']
-        if not views_list:
-            return False
-        
-        traverse_and_draw(0, views_list, output_canvas)
-        resized_canvas = cv2.resize(output_canvas, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_NEAREST)
+        ui_height, ui_width, _ = ui_img.shape
+        if ui_width > ui_height: return False # Skip landscape
 
-        # Albumentations (Humanize)
-        (alpha, sigma) = (random.randint(330, 400), random.randint(12, 20))
+        # 2. Draw Wireframe (Original Resolution)
+        width = int(mud_data.get('width', ui_width))
+        height = int(mud_data.get('height', ui_height))
+        
+        output_canvas = np.zeros((height, width, 3), dtype=np.uint8)
+        if not mud_data['views']: return False
+        
+        traverse_and_draw(0, mud_data['views'], output_canvas)
+
+        # 3. Crop (Before Resize)
+        # Using the same crop logic for both to ensure perfect alignment
+        ui_cropped = crop_bars_opencv(ui_img, resized=False)
+        wireframe_cropped = crop_bars_opencv(output_canvas, resized=False)
+
+        if ui_cropped is None or wireframe_cropped is None: return False
+        if ui_cropped.size == 0 or wireframe_cropped.size == 0: return False
+        
+        # UI: Smooth interpolation
+        ui_final = resize_contain(
+            ui_cropped, 
+            TARGET_WIDTH, TARGET_HEIGHT, 
+            interpolation=cv2.INTER_AREA
+        )
+        
+        # Wireframe: Sharp interpolation
+        wireframe_final = resize_contain(
+            wireframe_cropped, 
+            TARGET_WIDTH, TARGET_HEIGHT, 
+            interpolation=cv2.INTER_NEAREST
+        )
+
+        # 5. Augmentations
+        # Albumentations handles variable input sizes automatically
+        (alpha, sigma) = (random.randint(15, 35), random.randint(2, 4))
         transform_humanize = get_noisy_transformer(alpha, sigma)
-        augmented = transform_humanize(image=resized_canvas)
+        
+        augmented = transform_humanize(image=wireframe_final)
         canvas_with_noise = augmented['image']
 
+        # 6. Export
         export_base_path = OUTPUT_VALIDATION_DIR if sample_id in VALIDATION_SAMPLES else OUTPUT_TRAIN_DIR
         
-        # Export conditioning image (X)
+        # Save X (Input)
         output_path_x = os.path.join(export_base_path, f"{sample_id}_input.png")
-        Image.fromarray(canvas_with_noise).save(output_path_x)
+        canvas_bgr = cv2.cvtColor(canvas_with_noise, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(output_path_x, canvas_bgr)
 
-        # Exporting target image (Y)
-        ui_img = cv2.imread(os.path.join(MUD_ROOT, f"{sample_id}.png"))
-        ui_resized = cv2.resize(ui_img, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_AREA)
+        # Save Y (Target)
         output_path_y = os.path.join(export_base_path, f"{sample_id}_output.png")
-        cv2.imwrite(output_path_y, ui_resized)
+        cv2.imwrite(output_path_y, ui_final)
         
         return True
 
     except Exception as e:
+        print(f"Error processing {sample_id}: {e}")
         return False
 
 
