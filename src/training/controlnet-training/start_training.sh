@@ -1,7 +1,7 @@
 accelerate launch --dynamo_backend="no" train_controlnet_sd3.py \
   --pretrained_model_name_or_path="stabilityai/stable-diffusion-3.5-large" \
   --controlnet_model_name_or_path="stabilityai/stable-diffusion-3.5-large-controlnet-canny" \
-  --output_dir="/scratch/sd35-delineo-finetuned-v2" \
+  --output_dir="/scratch/sd35-delineo-finetuned-v3" \
   --resume_from_checkpoint="latest" \
   --cache_dir=$HF_HOME \
   --train_data_dir="/scratch/delineo_data/train" \
@@ -10,7 +10,7 @@ accelerate launch --dynamo_backend="no" train_controlnet_sd3.py \
   --caption_column="text" \
   --resolution=1024 \
   --train_batch_size=2 \
-  --gradient_accumulation_steps=8 \
+  --gradient_accumulation_steps=32 \
   --gradient_checkpointing \
   --dataloader_num_workers=8 \
   --allow_tf32 \
@@ -18,6 +18,6 @@ accelerate launch --dynamo_backend="no" train_controlnet_sd3.py \
   --num_train_epochs=30 \
   --set_grads_to_none \
   --use_8bit_adam \
-  --checkpointing_steps=1250 \
+  --checkpointing_steps=582 \
   --mixed_precision="bf16" \
   --report_to="tensorboard"

@@ -1,11 +1,11 @@
 import os
 import json
 import time
-from utils import crop_bars_from_filepath
 from tqdm import tqdm
 from joblib import Parallel, delayed
 from google import genai
 from google.genai import types
+from utils import image_from_filepath
 
 # Using oauth2 config see https://ai.google.dev/palm_docs/oauth_quickstart
 # Read default config from /home/your-user/.config/gcloud/application_default_credentials.json
@@ -90,8 +90,9 @@ def gather_all_images(base_dir):
 
 def process_single_image(full_path):
     relative_path = os.path.relpath(full_path, BASE_DIRECTORY)
-    cropped_image = crop_bars_from_filepath(full_path)
+    cropped_image = image_from_filepath(full_path)
     if not cropped_image:
+        print(f'fail crop {relative_path}')
         return None
 
     max_retries = 3

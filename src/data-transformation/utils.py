@@ -1,37 +1,29 @@
 from PIL import Image
 import cv2
+import json
+import os
 
-TOP_BAR_HEIGHT_TO_CROP = 70
-TOP_BAR_HEIGHT_TO_CROP_RESIZED = 48
-BOTTOM_NAV_HEIGHT_TO_CROP = 120
-BOTTOM_NAV_HEIGHT_TO_CROP_RESIZED = 80
-
-def crop_bars_from_filepath(image_path, resized = False):
-    bar_height = TOP_BAR_HEIGHT_TO_CROP_RESIZED if resized else TOP_BAR_HEIGHT_TO_CROP
-    nav_height = BOTTOM_NAV_HEIGHT_TO_CROP_RESIZED if resized else BOTTOM_NAV_HEIGHT_TO_CROP
+def image_from_filepath(image_path):
     try:
         with Image.open(image_path) as img:
             img = img.convert('RGB')
             width, height = img.size
-            if height <= (bar_height + nav_height):
-                return img.copy() 
-            box = (0, bar_height, width, height - nav_height)
-            return img.crop(box)
+            if height < width or width < 720:
+                return None
+            return img
     except Exception:
-        print("Failed to crop image, ")
+        print("Failed to open image")
         return None
 
 
-def crop_bars_opencv(img, resized = False):
-    bar_height = TOP_BAR_HEIGHT_TO_CROP_RESIZED if resized else TOP_BAR_HEIGHT_TO_CROP
-    nav_height = BOTTOM_NAV_HEIGHT_TO_CROP_RESIZED if resized else BOTTOM_NAV_HEIGHT_TO_CROP
+def crop_bars_opencv(img, status_height, nav_height):
     if img is None or img.size == 0:
         return None
     height, width, _ = img.shape
-    if height > (bar_height + nav_height):
+    if height > (status_height + nav_height):
         # Slicing syntax: image[y_start : y_end, x_start : x_end]
         # We crop from Top Bar -> Height minus Bottom Bar
-        return img[bar_height : height - nav_height, 0 : width]
+        return img[status_height : height - nav_height, 0 : width]
     print(f"Skipping crop, image too small.")
     return None
 
@@ -46,8 +38,48 @@ def resize_contain(image, target_w, target_h, interpolation=cv2.INTER_AREA):
     new_h = int(h * scale)
     return cv2.resize(image, (new_w, new_h), interpolation=interpolation)
 
-import json
-import os
+def resize_width_and_crop(image, target_w, target_h, interpolation=cv2.INTER_AREA):
+    """
+    Resizes image to a fixed target_w while maintaining aspect ratio.
+    If the resulting height exceeds target_h, the bottom is cropped.
+    """
+    h, w = image.shape[:2]
+    scale = target_w / w
+    new_h = int(h * scale)
+    
+    resized = cv2.resize(image, (target_w, new_h), interpolation=interpolation)
+    
+    # Cut height if too tall (Top-Crop: keeps the top, cuts the bottom)
+    if new_h > target_h:
+        resized = resized[0:target_h, :]
+        
+    return resized
+
+
+STATUS_BAR_HEIGHT_ANDROID = 42
+STATUS_BAR_HEIGHT_IPHONE = 34
+STATUS_BAR_HEIGHT_TALL_IPHONE = 50
+STATUS_BAR_HEIGHT_RICO = 64
+def crop_vins_status_bar(img, platform, orig_proportion):
+    if img is None:
+        return None
+    
+    height, width, _ = img.shape
+    
+    crop_top = 0
+    if platform == "Android":
+        crop_top = STATUS_BAR_HEIGHT_ANDROID
+    elif platform == "iphone":
+        if orig_proportion < 9/16:
+            # 9:19.5 screens will be scaled to fit 720px width and statusbar gets up to 50px at the top
+            crop_top = STATUS_BAR_HEIGHT_TALL_IPHONE
+        else:
+            crop_top = STATUS_BAR_HEIGHT_IPHONE
+    elif platform == "Rico":
+        crop_top = STATUS_BAR_HEIGHT_RICO
+        
+    # Crop [y:h, x:w]
+    return img[crop_top:height, 0:width]
 
 def load_ui_captions_map(jsonl_path = "./ui_captions_dataset.jsonl"):
     """

@@ -9,15 +9,17 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 import math
 import random
-from utils import crop_bars_opencv, resize_contain
+from utils import crop_bars_opencv, resize_width_and_crop
 
 # --- CONFIGURATION ---
 NUM_CPUS = -1 # All CPUs available
 current_directory = os.path.dirname(os.path.abspath(__file__))
 MUD_ROOT = os.path.join(current_directory, "../raw-data/mud") # Folder containing .png and .json
+SAMPLE_SIZE = 7500
 
 OUTPUT_TRAIN_DIR = Path("/scratch/delineo_data/train/mud")
 OUTPUT_VALIDATION_DIR = Path("/scratch/delineo_data/validation")
+
 os.makedirs(OUTPUT_TRAIN_DIR, exist_ok=True)
 os.makedirs(OUTPUT_VALIDATION_DIR, exist_ok=True)
 
@@ -30,12 +32,17 @@ VALIDATION_SAMPLES = (
 BG_COLOR = (0, 0, 0)
 CONTRAST_COLOR = (255, 255, 255)
 AVG_CHAR_WIDTH_PIXELS = 13
-MIN_SEMANTIC_ELEMENTS = 5
-MAX_SEMANTIC_ELEMENTS = 20 # Many elements were noticed to create noisy sketches
+MIN_SEMANTIC_ELEMENTS = 3
+MAX_SEMANTIC_ELEMENTS = 15 # Many elements were noticed to create noisy sketches
+STROKE_WIDTH = 3
 
 # Target Resolution (9:16 Aspect Ratio safe for SD3.5)
 TARGET_WIDTH = 720
 TARGET_HEIGHT = 1280
+MUD_STATUS_HEIGHT=42
+MUD_NAV_HEIGHT=84
+
+
 
 def get_class_suffix(node):
     full_class = node.get('class', '')
@@ -52,15 +59,15 @@ def calculate_lines(text_content, width):
         total_lines += wrapped_lines
     return max(1, total_lines)
 
-def draw_filled_rectangle(img, bounds, stroke=3):
+def draw_filled_rectangle(img, bounds):
     cv2.rectangle(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=BG_COLOR, thickness=-1)
-    cv2.rectangle(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=stroke)
+    cv2.rectangle(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
 def draw_image_placeholder(img, bounds, text_content=None):
     """Draw an X inside a rectangle"""
     draw_filled_rectangle(img, bounds)
-    cv2.line(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=3)
-    cv2.line(img, (bounds[0], bounds[3]), (bounds[2], bounds[1]), color=CONTRAST_COLOR, thickness=3)
+    cv2.line(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
+    cv2.line(img, (bounds[0], bounds[3]), (bounds[2], bounds[1]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
 def draw_icon_placeholder(img, bounds, text_content=None):
     """Draw a circle with an 'X' inside to represent an icon."""
@@ -76,7 +83,7 @@ def draw_icon_placeholder(img, bounds, text_content=None):
         return
 
     cv2.circle(img, center_point, radius, color=BG_COLOR, thickness=-1)
-    cv2.circle(img, center_point, radius, color=CONTRAST_COLOR, thickness=3)
+    cv2.circle(img, center_point, radius, color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
     # Determine the inner area for the 'X' (e.g., 60% of the radius)
     padding = int(radius * 0.4) 
@@ -87,8 +94,8 @@ def draw_icon_placeholder(img, bounds, text_content=None):
     x2_in = x_center + radius - padding
     y2_in = y_center + radius - padding
     
-    cv2.line(img, (x1_in, y1_in), (x2_in, y2_in), color=CONTRAST_COLOR, thickness=3)
-    cv2.line(img, (x1_in, y2_in), (x2_in, y1_in), color=CONTRAST_COLOR, thickness=3)
+    cv2.line(img, (x1_in, y1_in), (x2_in, y2_in), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
+    cv2.line(img, (x1_in, y2_in), (x2_in, y1_in), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
 def draw_text_placeholder(img, bounds, text_content=None, fit_text=None, center_text=None):
     """Draw horizontal lines representing text. Single lines reflect content width; multi-lines span the container width."""
@@ -128,11 +135,11 @@ def draw_text_placeholder(img, bounds, text_content=None, fit_text=None, center_
         if y_pos >= bounds[3]: 
             break
         
-        cv2.line(img, (line_start, y_pos), (line_end, y_pos), color=CONTRAST_COLOR, thickness=2)
+        cv2.line(img, (line_start, y_pos), (line_end, y_pos), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
 def draw_container_placeholder(img, bounds, text_content=None):
     """Draw a rectangle outline"""
-    cv2.rectangle(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=3)
+    cv2.rectangle(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
 def draw_button_placeholder(img, bounds, text_content=None):
     """Rectangle with centralized text lines inside"""
@@ -144,19 +151,12 @@ def draw_button_placeholder(img, bounds, text_content=None):
     if text_content and inner_bounds[2] > inner_bounds[0] and inner_bounds[3] > inner_bounds[1]:
         draw_text_placeholder(img, inner_bounds, text_content, fit_text=True, center_text=True)
 
-def draw_input_placeholder(img, bounds, text_content=None):
-    """Rectangle with left-justified text lines inside"""
-    draw_filled_rectangle(img, bounds)
-    # Inner padding for text
-    inner_bounds = [bounds[0] + 50, bounds[1], bounds[2], bounds[3]]
-    if text_content and inner_bounds[2] > inner_bounds[0] and inner_bounds[3] > inner_bounds[1]:
-        draw_text_placeholder(img, inner_bounds, text_content, fit_text=True)
 
 def draw_checkbox_placeholder(img, bounds, text_content=None):
     """Small square with potential check"""
-    draw_filled_rectangle(img, bounds, stroke=2)
+    draw_filled_rectangle(img, bounds)
     # Draw a small 'tick' simulation
-    cv2.line(img, (bounds[0]+2, bounds[1]+(bounds[3]-bounds[1])//2), (bounds[0]+(bounds[2]-bounds[0])//2, bounds[3]-2), color=CONTRAST_COLOR, thickness=2)
+    cv2.line(img, (bounds[0]+2, bounds[1]+(bounds[3]-bounds[1])//2), (bounds[0]+(bounds[2]-bounds[0])//2, bounds[3]-2), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
 # --- MAPPING LOGIC ---
 
@@ -166,7 +166,7 @@ VISUAL_FUNCS = {
     "Icon": draw_icon_placeholder,
     "Text": draw_text_placeholder,
     "Button": draw_button_placeholder,
-    "Input": draw_input_placeholder,
+    "Box": draw_filled_rectangle,
     "Container": draw_container_placeholder,
     "Checkbox": draw_checkbox_placeholder,
 }
@@ -305,13 +305,12 @@ def traverse_and_draw(view_idx, all_views, canvas_array):
 def get_noisy_transformer(alpha, sigma):
   return A.Compose([
     A.ElasticTransform(alpha=alpha, sigma=sigma, p=1, border_mode=cv2.BORDER_CONSTANT),
-    A.Rotate(limit=0.5, p=0.7, border_mode=cv2.BORDER_CONSTANT),
     A.CoarseDropout(
-     num_holes_range=(3, 10),
-     hole_height_range=(10, 30),
-     hole_width_range=(10, 40),
+     num_holes_range=(3, 5),
+     hole_height_range=(5, 15),
+     hole_width_range=(5, 20),
      fill="inpaint_ns",
-     p=0.4
+     p=0.3
  )
 ])
 
@@ -410,31 +409,25 @@ def process_single_item(item):
         
         traverse_and_draw(0, mud_data['views'], output_canvas)
 
-        # 3. Crop (Before Resize)
-        # Using the same crop logic for both to ensure perfect alignment
-        ui_cropped = crop_bars_opencv(ui_img, resized=False)
-        wireframe_cropped = crop_bars_opencv(output_canvas, resized=False)
-
-        if ui_cropped is None or wireframe_cropped is None: return False
-        if ui_cropped.size == 0 or wireframe_cropped.size == 0: return False
-        
         # UI: Smooth interpolation
-        ui_final = resize_contain(
-            ui_cropped, 
+        ui_final = crop_bars_opencv(resize_width_and_crop(
+            ui_img, 
             TARGET_WIDTH, TARGET_HEIGHT, 
             interpolation=cv2.INTER_AREA
-        )
+        ), MUD_STATUS_HEIGHT, MUD_NAV_HEIGHT)
         
         # Wireframe: Sharp interpolation
-        wireframe_final = resize_contain(
-            wireframe_cropped, 
+        wireframe_final = crop_bars_opencv(resize_width_and_crop(
+            output_canvas, 
             TARGET_WIDTH, TARGET_HEIGHT, 
             interpolation=cv2.INTER_NEAREST
-        )
+        ), MUD_STATUS_HEIGHT, MUD_NAV_HEIGHT)
+
+        if ui_final is None or wireframe_final is None: return False
 
         # 5. Augmentations
-        # Albumentations handles variable input sizes automatically
-        (alpha, sigma) = (random.randint(15, 35), random.randint(2, 4))
+        (alpha, sigma) = (random.randint(300, 400), random.randint(20, 25))
+
         transform_humanize = get_noisy_transformer(alpha, sigma)
         
         augmented = transform_humanize(image=wireframe_final)
@@ -465,7 +458,7 @@ def main():
     filtered_data = get_valid_input_data()
 
     # Process a batch
-    SAMPLE_BATCH_SIZE = min(7000, len(filtered_data))
+    SAMPLE_BATCH_SIZE = min(SAMPLE_SIZE, len(filtered_data))
     input_batch = random.sample(filtered_data, SAMPLE_BATCH_SIZE)
 
     print(f"--- PROCESSING {len(input_batch)} DATA ITEMS IN PARALLEL ---")

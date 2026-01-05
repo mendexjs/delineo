@@ -9,9 +9,21 @@ Create env from file: `conda env create -f conda-environment.yml`
 
 # Datasets and data sources
 
+### VINS Dataset
+>**Description:** VINS is a recent UI dataset with xml files containing bounding boxes for components, annotated by humans. <br/>
+**Usage:** We use VINS to programmatically create 3,119 synthetic sketches samples, transforming components declared in the xml file to shapes and adding noise to emulate human hand sketches.<br/><br/>
+**Paper:** https://dl.acm.org/doi/10.1145/3411764.3445762 <br/>
+**Repo:** https://github.com/sbunian/VINS <br/>
+**Download Link:** https://drive.google.com/file/d/1cbTRT3ky_zTveb_NnNPLUO9ZGXHvCcUl/view?usp=sharing
+
+Download via cli:
+```bash
+mkdir -p src/raw-data/vins && ZIP_PATH=./src/raw-data/vins/vins_dataset.zip && gdown 1ucti2ujNJgKV-Ts_mXALA7BZ97iPv8h6 -O ${ZIP_PATH} && unzip -q -o ${ZIP_PATH} -d src/raw-data && rm -r ./src/raw-data/vins && mv src/raw-data/All\ Dataset src/raw-data/vins
+```
+
 ### MUD Dataset
 >**Description:** MUD is a UI dataset intended to improve view hierarchy issues that Rico has. It's more recent, so it also has more modern app user interfaces. <br/>
-**Usage:** We use MUD to programmatically create 8.000 synthetic sketches samples, transforming components declared in the json file to shapes and adding noise to emulate human hand sketches.<br/><br/>
+**Usage:** We use MUD to programmatically create 7,000 synthetic sketches samples, transforming components declared in the json file to shapes and adding noise to emulate human hand sketches.<br/><br/>
 **Paper:** https://dl.acm.org/doi/10.1145/3613904.3642350 <br/>
 **Repo:** https://github.com/sidongfeng/MUD/tree/main <br/>
 **Download Link:** https://drive.google.com/file/d/1cbTRT3ky_zTveb_NnNPLUO9ZGXHvCcUl/view?usp=sharing
@@ -23,7 +35,7 @@ mkdir -p src/raw-data/mud && TAR_PATH=./src/raw-data/mud/mud_dataset.tar.gz && g
 
 # Swire Dataset
 >**Description:** Swire has sketches created by real designers, and files are enumerated according to Rico dataset IDs. The sullfix represent an anonymous designer. e.g. 123_1.jpg -- Rico UI 123, designer codename 1.<br/>
-**Usage:** This is our gold-dataset, containing real world example of how designers sketch UIs. We'll combine this dataset with out mud-synthetic-sketches to train the diffusion control.<br/><br/>
+**Usage:** This is our gold-dataset, containing real domain examples of how designers sketch UIs. We'll combine this dataset with out mud-synthetic-sketches to train the diffusion control.<br/><br/>
 **Paper:** https://dl.acm.org/doi/10.1145/3290605.3300334 <br/>
 **Repo:** https://github.com/huang4fstudio/swire <br/>
 **Download Link:** https://storage.googleapis.com/crowdstf-rico-uiuc-4540/swire_dataset_v0.1/sketches.zip
@@ -42,10 +54,5 @@ mkdir -p src/raw-data && ZIP_PATH=./src/raw-data/swire_dataset.zip && wget https
 
 Download via cli:
 ```bash
-mkdir -p src/raw-data/rico && TAR_PATH=./src/raw-data/rico/rico_dataset.tar.gz && wget https://storage.googleapis.com/crowdstf-rico-uiuc-4540/rico_dataset_v0.1/unique_uis.tar.gz -O ${TAR_PATH} && tar -xzf ${TAR_PATH} -C src/raw-data/rico --strip-components=1 && rm ${TAR_PATH}
-# We don't need the json files
-# Removing in Linux
-cd src/raw-data/rico && rm *.json
-# Mac OS
-cd src/raw-data/rico && find . -name "*.json" -type f -delete
+mkdir -p src/raw-data/rico && TAR_PATH=./src/raw-data/rico/rico_dataset.tar.gz && wget https://storage.googleapis.com/crowdstf-rico-uiuc-4540/rico_dataset_v0.1/unique_uis.tar.gz -O ${TAR_PATH} && tar -xzf ${TAR_PATH} -C src/raw-data/rico --strip-components=1 && rm ${TAR_PATH} && cd src/raw-data/rico && rm *.json
 ```

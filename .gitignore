@@ -9,3 +9,4 @@ src/experiments/upload_checkpoint.py
 **/wandb
 notarycli
 **/sd-scripts-sd3
+src/training/.checkpoints

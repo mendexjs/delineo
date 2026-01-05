@@ -2,12 +2,15 @@ import cv2
 from pathlib import Path
 from joblib import Parallel, delayed
 from tqdm import tqdm
-from utils import crop_bars_opencv
+from utils import crop_bars_opencv, resize_width_and_crop
 
 # --- CONFIGURATION ---
 TARGET_WIDTH = 720
 TARGET_HEIGHT = 1280
 N_JOBS = -1 # All CPUs available
+
+RICO_STATUS_HEIGHT = 42
+RICO_NAV_HEIGHT = 86
 
 
 # These samples are corrupted
@@ -80,10 +83,10 @@ def process_single_pair(swire_path, rico_dir, out_train_dir, out_validation_dir)
 
         # 4. Resize
         # SWIRE (Wireframe) -> Use NEAREST to keep sharp edges (black/white)
-        swire_resized = cv2.resize(img_swire, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_NEAREST)
+        swire_resized = resize_width_and_crop(img_swire, TARGET_WIDTH, TARGET_HEIGHT, interpolation=cv2.INTER_NEAREST)
         
         # RICO (Screenshot) -> Use AREA for high-quality downsampling of UI text
-        rico_resized = crop_bars_opencv(cv2.resize(img_rico, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_AREA), resized=True)
+        rico_resized = crop_bars_opencv(resize_width_and_crop(img_rico, TARGET_WIDTH, TARGET_HEIGHT, interpolation=cv2.INTER_AREA), RICO_STATUS_HEIGHT, RICO_NAV_HEIGHT)
         
         # Save
         export_dir = out_validation_dir if rico_id in SWIRE_VALIDATION_SAMPLES else out_train_dir
