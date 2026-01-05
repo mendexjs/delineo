@@ -8,3 +8,4 @@ src/transformed-data
 src/experiments/upload_checkpoint.py
 **/wandb
 notarycli
+**/sd-scripts-sd3
