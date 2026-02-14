@@ -1,0 +1,52 @@
+[general]
+resolution = [1024, 1024]
+batch_size = 4
+keep_tokens = 1
+enable_bucket = true
+min_bucket_reso = 256
+max_bucket_reso = 2048
+bucket_reso_steps = 64
+bucket_no_upscale = true
+
+[[datasets]]
+resolution = 1024
+batch_size = 4
+keep_tokens = 1
+
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/shop'
+  num_repeats = 3
+
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/finances'
+  num_repeats = 5
+
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/cards'
+  num_repeats = 6
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/booking'
+  num_repeats = 7
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/onboarding'
+  num_repeats = 7
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/media'
+  num_repeats = 7
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/sign_up'
+  num_repeats = 8
+
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/forms'
+  num_repeats = 10
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/maps'
+  num_repeats = 12
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/home'
+  num_repeats = 15
+
+  [[datasets.subsets]]
+  image_dir = '/home/matheus_mendes/projects/delineo/src/training/lora/dataset/chats'
+  num_repeats = 20

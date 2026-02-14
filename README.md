@@ -56,3 +56,14 @@ Download via cli:
 ```bash
 mkdir -p src/raw-data/rico && TAR_PATH=./src/raw-data/rico/rico_dataset.tar.gz && wget https://storage.googleapis.com/crowdstf-rico-uiuc-4540/rico_dataset_v0.1/unique_uis.tar.gz -O ${TAR_PATH} && tar -xzf ${TAR_PATH} -C src/raw-data/rico --strip-components=1 && rm ${TAR_PATH} && cd src/raw-data/rico && rm *.json
 ```
+
+---
+
+### For LoRA training we need the models safetensors, so we use with sd-scripts tool
+
+`export HF_TOKEN"hf-xyz"`
+
+### Downloading the StableDiffusion 3.5 + controlnet from terminal:
+```bash
+mkdir -p /scratch/models && hf download stabilityai/stable-diffusion-3.5-large sd3.5_large.safetensors text_encoders/clip_g.safetensors text_encoders/clip_l.safetensors text_encoders/t5xxl_fp16.safetensors --local-dir /scratch/models 
+```

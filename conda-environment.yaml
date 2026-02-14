@@ -502,5 +502,5 @@ variables:
   DATASETS_CACHE: /scratch/delineo_data/.cache/datasets
   WANDB_API_KEY: YOUR_API_KEY
   GOOGLE_CLOUD_PROJECT: YOUR_PROJECT_ID
-  GOOGLE_CLOUD_LOCATION: us-east5
+  GOOGLE_CLOUD_LOCATION: global
 prefix: /home/matheus_mendes/miniconda3/envs/delineo

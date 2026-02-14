@@ -1,0 +1,1 @@
+High-fidelity mobile UI, friendly and approachable theme, natural color palette with greens and browns. Clean typography and a focus on a lifestyle hero image.  Full screen onboarding flow with a hero image of a delivery person. Overlayed text 'Welcome to our store' and subtitle. Primary CTA button at the bottom with text 'Get Started'. White carrot icon above the title.
