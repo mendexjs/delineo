@@ -15,7 +15,7 @@ from utils import crop_bars_opencv, resize_width_and_crop
 NUM_CPUS = -1 # All CPUs available
 current_directory = os.path.dirname(os.path.abspath(__file__))
 MUD_ROOT = os.path.join(current_directory, "../raw-data/mud") # Folder containing .png and .json
-SAMPLE_SIZE = 7500
+SAMPLE_SIZE = -1
 
 OUTPUT_TRAIN_DIR = Path("/scratch/delineo_data/train/mud")
 OUTPUT_VALIDATION_DIR = Path("/scratch/delineo_data/validation")
@@ -33,15 +33,14 @@ BG_COLOR = (0, 0, 0)
 CONTRAST_COLOR = (255, 255, 255)
 AVG_CHAR_WIDTH_PIXELS = 13
 MIN_SEMANTIC_ELEMENTS = 3
-MAX_SEMANTIC_ELEMENTS = 15 # Many elements were noticed to create noisy sketches
-STROKE_WIDTH = 3
+MAX_SEMANTIC_ELEMENTS = 20 # Many elements were noticed to create noisy sketches
+STROKE_WIDTH = 8
 
 # Target Resolution (9:16 Aspect Ratio safe for SD3.5)
 TARGET_WIDTH = 720
 TARGET_HEIGHT = 1280
 MUD_STATUS_HEIGHT=42
 MUD_NAV_HEIGHT=84
-
 
 
 def get_class_suffix(node):
@@ -59,17 +58,17 @@ def calculate_lines(text_content, width):
         total_lines += wrapped_lines
     return max(1, total_lines)
 
-def draw_filled_rectangle(img, bounds):
+def draw_filled_rectangle(img, bounds, _=None):
     cv2.rectangle(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=BG_COLOR, thickness=-1)
     cv2.rectangle(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
-def draw_image_placeholder(img, bounds, text_content=None):
+def draw_image_placeholder(img, bounds, _=None):
     """Draw an X inside a rectangle"""
     draw_filled_rectangle(img, bounds)
     cv2.line(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
     cv2.line(img, (bounds[0], bounds[3]), (bounds[2], bounds[1]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
-def draw_icon_placeholder(img, bounds, text_content=None):
+def draw_icon_placeholder(img, bounds, _=None):
     """Draw a circle with an 'X' inside to represent an icon."""
     # Calculate Center and Radius for the Circle
     x_center = int((bounds[0] + bounds[2]) / 2)
@@ -137,7 +136,7 @@ def draw_text_placeholder(img, bounds, text_content=None, fit_text=None, center_
         
         cv2.line(img, (line_start, y_pos), (line_end, y_pos), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
-def draw_container_placeholder(img, bounds, text_content=None):
+def draw_container_placeholder(img, bounds, _=None):
     """Draw a rectangle outline"""
     cv2.rectangle(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
@@ -152,12 +151,6 @@ def draw_button_placeholder(img, bounds, text_content=None):
         draw_text_placeholder(img, inner_bounds, text_content, fit_text=True, center_text=True)
 
 
-def draw_checkbox_placeholder(img, bounds, text_content=None):
-    """Small square with potential check"""
-    draw_filled_rectangle(img, bounds)
-    # Draw a small 'tick' simulation
-    cv2.line(img, (bounds[0]+2, bounds[1]+(bounds[3]-bounds[1])//2), (bounds[0]+(bounds[2]-bounds[0])//2, bounds[3]-2), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
-
 # --- MAPPING LOGIC ---
 
 VISUAL_FUNCS = {
@@ -168,7 +161,6 @@ VISUAL_FUNCS = {
     "Button": draw_button_placeholder,
     "Box": draw_filled_rectangle,
     "Container": draw_container_placeholder,
-    "Checkbox": draw_checkbox_placeholder,
 }
 
 CLASS_TO_VISUAL = {
@@ -176,11 +168,12 @@ CLASS_TO_VISUAL = {
     'TextView': 'Text',
     
     # Inputs/Interactables
-    'EditText': 'Input',
-    'KCheckBox': 'Checkbox',
-    'Switch': 'Checkbox',
-    'ToggleButton': 'Checkbox',
-    'CompoundButton': 'Checkbox',
+    'EditText': 'Box',
+    'KCheckBox': 'Box',
+    'CheckBox': 'Box',
+    'Switch': 'Box',
+    'ToggleButton': 'Box',
+    'CompoundButton': 'Box',
     
     # Buttons
     'Button': 'Button',
@@ -194,9 +187,9 @@ CLASS_TO_VISUAL = {
     'ImageButton': 'Icon',
     
     # Containers / Layouts
-    'CardView': 'Container',
-    'MaterialCardView': 'Container',
-    'View': 'Container',
+    'CardView': 'Box',
+    'MaterialCardView': 'Box',
+    # 'View': 'Container',
     'SidebarLayout': 'Container',
     'Gallery': 'Container',
     'ViewFlipper': 'Container',
@@ -458,7 +451,7 @@ def main():
     filtered_data = get_valid_input_data()
 
     # Process a batch
-    SAMPLE_BATCH_SIZE = min(SAMPLE_SIZE, len(filtered_data))
+    SAMPLE_BATCH_SIZE = min(SAMPLE_SIZE, len(filtered_data)) if SAMPLE_SIZE > 0 else len(filtered_data)
     input_batch = random.sample(filtered_data, SAMPLE_BATCH_SIZE)
 
     print(f"--- PROCESSING {len(input_batch)} DATA ITEMS IN PARALLEL ---")

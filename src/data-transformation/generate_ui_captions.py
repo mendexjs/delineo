@@ -11,49 +11,57 @@ from utils import image_from_filepath
 # Read default config from /home/your-user/.config/gcloud/application_default_credentials.json
 # set env variable GOOGLE_APPLICATION_CREDENTIALS if necessary
 client = genai.Client(
-    vertexai=True
+    vertexai=True,
+    project="hybrid-cabinet-482822-p5",
+    location="us-east5"
 ) 
 
 
 # --- Configuration ---
 BASE_DIRECTORY = "/scratch/delineo_data/train/"
-OUTPUT_FILE = "./ui_captions_dataset.jsonl"
+OUTPUT_FILE = "./ui_captions_dataset_v2.jsonl"
 
-N_JOBS = -1
-BATCH_SIZE = 240
+N_JOBS = -2
+BATCH_SIZE = 100
 
 # Set to an integer (e.g., 10) to test. 
 # Set to None (or 0) to run the full dataset.
 LIMIT = -1
 
 SYSTEM_INSTRUCTION = """
-You are an expert UI/UX designer and prompt engineer creating training captions for a mobile UI generation model. 
-Your task is to analyze the provided mobile screenshot and write a dense, visually descriptive caption that would allow a designer to recreate the interface exactly.
+You are an expert UI/UX designer creating training captions for a mobile UI generation model. 
+Your task is to analyze the provided mobile screenshot and write a concise, professional prompt that a working product designer would naturally write to describe the interface. 
+
+**CRITICAL ARCHITECTURE RULE:**
+Your output MUST be strictly divided into two logical halves:
+1.  **The Aesthetic Prefix (First ~20-40 words):** Global style, theme, color palette, and overall visual trend. 
+2.  **The Component Body (Remaining words):** The layout and UI components described using standard industry terminology, natural phrasing, and key text values.
 
 **Strict Output Rules:**
-1.  **Format:** Return ONLY the raw text description. No Markdown, no quotes, no preambles.
-2.  **Start:** Always start with "High-fidelity single screen mobile app UI design, no border, edge-to-edge view of..." unless it falls on following rejection case.
-3.  **Adaptive Length:** * **Simple UI (e.g., Login, Search):** Keep it concise (40-80 words). Focus on typography, whitespace, and specific colors.
-    * **Complex UI (e.g., Dashboard, Feed):** Go deep (100-160 words). Describe every section, card, and icon in detail.
-4.  **Rejection:** If the image is blank, error, or purely text, return: "NOISY UI"
+1.  **Start:** Always start with "High-fidelity mobile UI, [Theme/Vibe], [Color Palette]..." unless rejecting.
+2.  **Length & Flow:** Be concise and natural (approx. 50-120 words max). Do not over-describe every pixel. Use professional shorthand and focus on the visual hierarchy.
+3.  **Rejection (Quality Control):** If the image meets ANY of the following criteria, you must abort the description and return exactly and ONLY the phrase: "NOISY UI"
+    * **Non-UI:** Blank screens, error messages, or purely text documents.
+    * **Outdated UI:** Heavy skeuomorphism, archaic OS aesthetics (e.g., Windows 95) or outdated gradients.
+    * **Amateur UI:** Broken layouts, bad padding/alignment, poor contrast, or chaotic hierarchy.
 
-**Content Guidelines:**
-1.  **Define the Screen:** "A minimalist login screen" vs "A data-dense analytics dashboard".
-2.  **Layout & Geometry:** precise structures. "A centered card on a solid background" (Simple) vs "A masonry grid of 6 different sized cards" (Complex).
-3.  **Visual Details:** Describe button shapes, shadow styles, and exact colors ("electric blue" not just "blue").
-4.  **Content Hallucination:** Describe the *imagery* (photos, icons) vividly.
-5.  **Typography & Style:** Mention font vibes ("bold sans-serif", "elegant serif") and aesthetic ("clean", "brutalist", "playful").
+**Content Guidelines for Canny ControlNet:**
+The Canny map will provide the spatial lines. Your prompt MUST provide the component names, fills, and key text.
+* **Designer Vocabulary:** Use terms like: hero image, primary CTA, secondary button, bottom nav, FAB, modal, card component, list view, segmented control, whitespace, padding, elevation, drop shadow, opacity.
+* **Colors & Materials:** Use clear, professional descriptors ("matte dark mode," "glassmorphism," "muted gray," "accent primary color").
+* **Exact Text Rendering:** If prominent text exists (like headers or CTAs), enclose it in single quotes (e.g., CTA 'Sign Up').
+* **Imagery:** Briefly state what the placeholder images represent (e.g., "avatar," "lifestyle hero image").
 
 **Example (Simple UI):**
-High-fidelity single screen mobile app UI design, no border, edge-to-edge view of a sign-in page. The background is a solid matte black. Center stage is a clean white input field with the placeholder text 'Email Address'. Below it, a bright 'electric lime' pill-shaped button with the text 'Enter'. The logo at the top is a minimal geometric triangle in white. The aesthetic is ultra-minimalist with ample negative space.
+High-fidelity mobile UI, ultra-minimalist dark mode aesthetic, flat design, high contrast. A clean login screen with generous whitespace and a strong visual hierarchy. Center stage is a stark white text field for 'Email Address', sitting just above a pill-shaped primary CTA in electric lime reading 'Enter'. The top-center features a minimal geometric triangle logo. Flat elevation with no drop shadows.
 
 **Example (Complex UI):**
-High-fidelity single screen mobile app UI design, no border, edge-to-edge view of a travel discovery feed. The header is transparent over a full-width hero photo of a mountain range. A floating glass-effect search bar sits at the top with a 'Filter' icon. Below, a horizontal scrolling list of circular 'Story' avatars with gradient rings. The main feed consists of large vertical cards, each displaying a high-res resort photo, a bold title 'Alpine Lodge', a star rating badge in yellow, and a price tag '$120/night' in the bottom right corner. The navigation bar at the bottom has four distinct icons: Home, Search, Saved, Profile.
+High-fidelity mobile UI, modern travel aesthetic, airy lighting, glassmorphism elements, clean white background with soft yellow accents. A travel discovery feed featuring a transparent header overlapping a full-width nature hero image. Below is a frosted glass search bar with a 'Filter' icon. A horizontal scrollable section contains circular 'Story' avatars with gradient borders. The main vertical list view uses large, rounded-corner card components. A sample card shows a forest photo, bold serif title 'Alpine Lodge', a yellow star rating badge, and a bottom-right price tag '$120/night'. A minimalist line-art bottom nav includes Home, Search, Saved, Profile.
 """
 
 generation_config = types.GenerateContentConfig(
-    temperature=0.4,
-    max_output_tokens=200,
+    temperature=0.3,
+    max_output_tokens=256,
     system_instruction=SYSTEM_INSTRUCTION,
     safety_settings=[
         types.SafetySetting(
@@ -78,7 +86,7 @@ generation_config = types.GenerateContentConfig(
 
 def gather_all_images(base_dir):
     valid_paths = []
-    print(f"📂 Scanning {base_dir} for '_output.png' files...")
+    print(f"Scanning {base_dir} for '_output.png' files...")
     for root, dirs, files in os.walk(base_dir):
         for file in files:
             if file.endswith("_output.png"):
@@ -90,31 +98,37 @@ def gather_all_images(base_dir):
 
 def process_single_image(full_path):
     relative_path = os.path.relpath(full_path, BASE_DIRECTORY)
-    cropped_image = image_from_filepath(full_path)
-    if not cropped_image:
-        print(f'fail crop {relative_path}')
+    image = image_from_filepath(full_path)
+    if not image:
+        print(f'Failed to load {relative_path}')
         return None
 
-    max_retries = 3
-    for attempt in range(max_retries):
+    for attempt in range(1, 7):
         try:
             response = client.models.generate_content(
                 model="gemini-2.0-flash",
-                contents=[cropped_image], 
+                contents=[image], 
                 config=generation_config
             )
             
+            # Catch instances where safety settings block the response
+            if not response.text:
+                print(f"Empty response (Safety block?) for {relative_path}")
+                return None
+                
             caption = response.text.strip().replace("```", "").replace("\n", " ")
             return {"filename": relative_path, "caption": caption}
             
         except Exception as e:
-            # Simple error handling for rate limits or server errors
             error_str = str(e)
-            if "429" in error_str or "ResourceExhausted" in error_str:
-                time.sleep(2 * (attempt + 1))
+            if "429" in error_str or "ResourceExhausted" in error_str or "quota" in error_str.lower():
+                sleep_time = 10 + 2 ** attempt 
+                time.sleep(sleep_time)
             else:
-                print(f"Failed {relative_path}: {e}") # Uncomment to debug
+                print(f"Failed {relative_path} with error: {error_str}") 
                 break
+    
+    print(f"Exhausted all retries for {relative_path} due to rate limits.")
     return None
 
 def append_to_jsonl(data_list, filepath):
@@ -145,8 +159,8 @@ def main():
         if rel_path not in processed_files:
             files_to_process.append(p)
     
-    if LIMIT and len(files_to_process) > LIMIT:
-        print(f"\n⚠️ LIMIT ACTIVE: Restricting run to first {LIMIT} images only.")
+    if LIMIT is not None and LIMIT > 0 and len(files_to_process) > LIMIT:
+        print(f"\nLIMIT ACTIVE: Restricting run to first {LIMIT} images only.")
         files_to_process = files_to_process[:LIMIT]
     
     print(f"Total images found: {len(all_file_paths)}")

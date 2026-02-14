@@ -15,23 +15,35 @@ current_directory = os.path.dirname(os.path.abspath(__file__))
 VINS_ROOT = Path(os.path.join(current_directory, "../raw-data/vins")) 
 
 OUTPUT_TRAIN_DIR = Path("/scratch/delineo_data/train/vins")
-OUTPUT_VALIDATION_DIR = Path("/scratch/delineo_data/validation")
+OUTPUT_VALIDATION_DIR = Path("/scratch/delineo_data/validation/vins")
 os.makedirs(OUTPUT_TRAIN_DIR, exist_ok=True)
 os.makedirs(OUTPUT_VALIDATION_DIR, exist_ok=True)
 
 # Add IDs here if you want specific validation split
 VALIDATION_SAMPLES = (
     'Android_2',
+    'Android_4',
+    'Android_15',
+    'Android_41',
+    'Android_58',
+    'Android_51',
+    'Android_140',
     'IMG_1517',
     'IMG_0751',
+    'IMG_3932',
+    'IMG_8773',
+    'IMG_9359',
+    'IMG_899828',
+    'IMG_906161',
+    '2349',
 )
 
 BG_COLOR = (0, 0, 0)
 CONTRAST_COLOR = (255, 255, 255)
 AVG_LINE_HEIGHT_PIXELS = 40
-MIN_SEMANTIC_ELEMENTS = 3
-MAX_SEMANTIC_ELEMENTS = 30 
-STROKE_WIDTH = 3
+MIN_SEMANTIC_ELEMENTS = 2
+MAX_SEMANTIC_ELEMENTS = 25
+STROKE_WIDTH = 6
 
 TARGET_WIDTH = 720
 TARGET_HEIGHT = 1280
@@ -110,9 +122,6 @@ def draw_button_placeholder(img, bounds):
     if line_end_x > line_start_x:
         cv2.line(img, (line_start_x, line_y), (line_end_x, line_y), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
-def draw_checkbox_placeholder(img, bounds):
-    draw_filled_rectangle(img, bounds)
-    cv2.line(img, (bounds[0]+2, bounds[1]+(bounds[3]-bounds[1])//2), (bounds[0]+(bounds[2]-bounds[0])//2, bounds[3]-2), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
 # --- MAPPING LOGIC ---
 
@@ -123,7 +132,6 @@ VISUAL_FUNCS = {
     "Text": draw_text_placeholder,
     "Button": draw_button_placeholder,
     "Container": draw_container_placeholder,
-    "Checkbox": draw_checkbox_placeholder,
     "Box": draw_filled_rectangle,
 }
 
@@ -146,10 +154,10 @@ CLASS_TO_VISUAL = {
     'Image': 'Image',
     
     # Controls
-    'CheckedTextView': 'Checkbox',
-    'CheckBox': 'Checkbox',
-    'Checkbox': 'Checkbox',
-    'Switch': 'Checkbox',
+    'CheckedTextView': 'Box',
+    'CheckBox': 'Box',
+    'Checkbox': 'Box',
+    'Switch': 'Box',
     
     'Drawer': 'Container',
     'Modal': 'Container',

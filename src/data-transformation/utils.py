@@ -8,7 +8,7 @@ def image_from_filepath(image_path):
         with Image.open(image_path) as img:
             img = img.convert('RGB')
             width, height = img.size
-            if height < width or width < 720:
+            if height < width or width < 600:
                 return None
             return img
     except Exception:
