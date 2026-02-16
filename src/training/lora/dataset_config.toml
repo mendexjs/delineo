@@ -1,6 +1,6 @@
 [general]
 resolution = [1024, 1024]
-batch_size = 4
+batch_size = 8
 keep_tokens = 1
 enable_bucket = true
 min_bucket_reso = 256
@@ -9,8 +9,8 @@ bucket_reso_steps = 64
 bucket_no_upscale = true
 
 [[datasets]]
-resolution = 1024
-batch_size = 4
+resolution = [1024, 1024]
+batch_size = 8
 keep_tokens = 1
 
   [[datasets.subsets]]

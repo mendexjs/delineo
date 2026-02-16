@@ -103,7 +103,7 @@ def process_single_image(full_path):
         print(f'Failed to load {relative_path}')
         return None
 
-    for attempt in range(1, 7):
+    for attempt in range(1, 9):
         try:
             response = client.models.generate_content(
                 model="gemini-2.0-flash",

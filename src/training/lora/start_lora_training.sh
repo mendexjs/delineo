@@ -1,7 +1,7 @@
-accelerate launch --num_cpu_threads_per_process=8 sd-scripts-sd3/sd3_train_network.py \
+accelerate launch --num_cpu_threads_per_process=8 sd-scripts-main/sd3_train_network.py \
   --pretrained_model_name_or_path="/scratch/models/sd3.5_large.safetensors" \
-  --clip_l="/scratch/models/text_encoders/clip-l.safetensors" \
-  --clip_g="/scratch/models/text_encoders/clip-g.safetensors" \
+  --clip_l="/scratch/models/text_encoders/clip_l.safetensors" \
+  --clip_g="/scratch/models/text_encoders/clip_g.safetensors" \
   --t5xxl="/scratch/models/text_encoders/t5xxl_fp16.safetensors" \
   --dataset_config="dataset_config.toml" \
   --output_dir="/scratch/delineo_outputs/lora" \
@@ -10,13 +10,10 @@ accelerate launch --num_cpu_threads_per_process=8 sd-scripts-sd3/sd3_train_netwo
   --network_module=networks.lora \
   --network_dim=64 \
   --network_alpha=32 \
-  --max_train_steps=3000 \
   --learning_rate=1e-4 \
-  --train_text_encoder \
-  --learning_rate_te1=5e-5 \
-  --learning_rate_te2=5e-5 \
+  --text_encoder_lr 5e-5 5e-5 \
   --lr_scheduler="constant_with_warmup" \
-  --lr_warmup_steps=100 \
+  --lr_warmup_steps=150 \
   --cache_latents \
   --optimizer_type="Adafactor" \
   --optimizer_args "scale_parameter=False" "relative_step=False" "warmup_init=False" \
@@ -28,4 +25,4 @@ accelerate launch --num_cpu_threads_per_process=8 sd-scripts-sd3/sd3_train_netwo
   --mixed_precision="bf16" \
   --full_bf16 \
   --weighting_scheme="sigma_sqrt" \
-  # --gradient_checkpointing
+  --gradient_checkpointing

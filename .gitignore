@@ -8,5 +8,5 @@ src/transformed-data
 src/experiments/upload_checkpoint.py
 **/wandb
 notarycli
-**/sd-scripts-sd3
+**/sd-scripts-main
 src/training/.checkpoints
