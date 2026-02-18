@@ -1,13 +1,22 @@
 # Delineo
 GenAI pipeline to transform UI hand sketches with prompt in high level mockups via open-source diffusion model's control techniques.
 
-### Conda set up
-Export env to a file: `conda export > conda-environment.yaml`
-Create env from file: `conda env create -f conda-environment.yml`
+### Conda set up for ControlNet
+
+Edit `delineo-environment.yaml` and update `prefix` with your conda home path.
+If you plan to train the ControlNet, you also need to change the `HF_TOKEN` variable with your hugging face token.
+
+Create env from file: `conda env create -f delineo-environment.yml`
+Export env to a file: `conda export > delineo-environment.yaml`
+
+Activate the environment to run following steps:
+`conda activate delineo`
 
 ---
 
-# Datasets and data sources
+# Training Setup
+
+## Datasets and data sources
 
 ### VINS Dataset
 >**Description:** VINS is a recent UI dataset with xml files containing bounding boxes for components, annotated by humans. <br/>
@@ -59,11 +68,52 @@ mkdir -p src/raw-data/rico && TAR_PATH=./src/raw-data/rico/rico_dataset.tar.gz &
 
 ---
 
-### For LoRA training we need the models safetensors, so we use with sd-scripts tool
+### Preprocessing datasets for training
 
-`export HF_TOKEN"hf-xyz"`
+> Alway ensure to edit the script output path to the location you like to output the data 
 
-### Downloading the StableDiffusion 3.5 + controlnet from terminal:
 ```bash
-mkdir -p /scratch/models && hf download stabilityai/stable-diffusion-3.5-large sd3.5_large.safetensors text_encoders/clip_g.safetensors text_encoders/clip_l.safetensors text_encoders/t5xxl_fp16.safetensors --local-dir /scratch/models 
+cd src/data-transformation && \
+python mud_preprocessing.py && \
+python vins_preprocessing.py && \
+python swire_preprocessing.py
+```
+
+### Generate captions with Gemini (optional)
+
+The captions I generated are available in `src/data-transformation/ui_captions_dataset_v2.jsonl`. You can use those unless you want to rework the prompt and regenerate.
+
+I spent about 7 USD to generate the captions, google cloud gets you 300 USD credits for new accounts.
+Ensure to setup your credentials and update projectId in `src/data-transformation/generate_ui_captions.py`
+Get your application_default_credentials.json (Docs: https://ai.google.dev/palm_docs/oauth_quickstart)
+
+> Note: The Gemini API is subject to rate limit. Sometimes the script will finish but you still need to run again the next day to generate captions for the ones it failed.
+> There is retry logic implemented, I had to run it about 4 times to get all captions, tough. 
+
+```bash
+cd src/data-transformation && \
+python generate_ui_captions.py
+```
+
+### Generating training metadata
+
+Finally, we can generate the metadata.jsonl, joining images, sketch and captions.
+
+```bash
+cd src/data-transformation && \
+python prepare_training_metadata.py
+```
+
+---
+
+### Training ControlNet
+
+The ControlNet training was done in a single NVIDIA Tesla A100 80gb. It took about 5 days to complete training.
+You might need install and use `tmux` to allow you have persistent terminal sessions in ssh and avoid training interruptions.
+
+```bash
+conda activate delineo
+
+cd src/training/controlnet && /
+bash start_training.sh
 ```

@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This is a modified version of https://github.com/huggingface/diffusers/blob/main/examples/controlnet/train_controlnet_sd3.py.
+# There's some tweaks to allow training SD3.5-large, and to make random square crop of our UI images.
+
 import argparse
 import contextlib
 import copy
@@ -753,6 +756,10 @@ def make_train_dataset(args, tokenizer_one, tokenizer_two, tokenizer_three, acce
                 )
         return captions
 
+    # ==============================================================================
+    # Delineo FIX: Random crop UI images in squares
+    # ==============================================================================
+
     # image_transforms = transforms.Compose(
     #     [
     #         transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
@@ -831,6 +838,7 @@ def make_train_dataset(args, tokenizer_one, tokenizer_two, tokenizer_three, acce
 
     return train_dataset
 
+    # ==============================================================================
 
 def collate_fn(examples):
     pixel_values = torch.stack([example["pixel_values"] for example in examples])
@@ -1373,7 +1381,7 @@ def main(args):
                 controlnet_image = (controlnet_image - vae.config.shift_factor) * vae.config.scaling_factor
 
                 # ==============================================================================
-                # 🔥 FIX FOR SD3.5 LARGE: Handle 4D -> 3D Input AND Text Embeddings
+                # Delineo FIX FOR SD3.5 LARGE: Handle 4D -> 3D Input AND Text Embeddings
                 # ==============================================================================
                 raw_controlnet = accelerator.unwrap_model(controlnet)
                 raw_transformer = accelerator.unwrap_model(transformer)

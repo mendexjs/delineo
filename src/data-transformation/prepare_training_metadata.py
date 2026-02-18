@@ -1,18 +1,15 @@
 import json
 import os
 from pathlib import Path
+import random
 from tqdm import tqdm
 from utils import load_ui_captions_map
 
 # --- CONFIGURATION ---
 DATA_ROOT = Path("/scratch/delineo_data/train")
-PROMPT = "High-fidelity mobile UI design"
 INVALID_UI = "NOISY UI"
 
-# ---------------------
-
-captions_map = load_ui_captions_map()
-
+captions_map = load_ui_captions_map('./ui_captions_dataset_v2.jsonl')
 
 def get_file_id(input_name, ds_name):
     if ds_name == 'swire':
@@ -41,7 +38,7 @@ def process_dataset(dir, valid_pairs, dataset_name):
         output_filename = f"{dataset_name}/{output_name}"
         caption = captions_map.get(output_filename)
         if not caption or caption == INVALID_UI:
-            invalid_samples.update([input_filename, output_filename])
+            invalid_samples.update([input_name, output_name])
             continue
         
         if output_path.exists():
@@ -53,6 +50,7 @@ def process_dataset(dir, valid_pairs, dataset_name):
     
     for invalid_swire in invalid_samples:
         try:
+            # delete invalid images -- filtered by gemini-2.0-flash in `generate_ui_captions.py`
             os.remove(dir / invalid_swire)
         except:
             continue
@@ -73,7 +71,8 @@ def main():
 
     # 2. Write to JSONL
     print(f"Writing {len(all_entries)} pairs to {metadata_path}...")
-    
+    random.seed(13)
+    random.shuffle(all_entries)
     with open(metadata_path, 'w') as f:
         for entry in tqdm(all_entries):
             json.dump(entry, f)

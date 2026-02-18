@@ -8,5 +8,6 @@ src/transformed-data
 src/experiments/upload_checkpoint.py
 **/wandb
 notarycli
-**/sd-scripts-main
+**/diffusers
+src/training/lora/dataset
 src/training/.checkpoints

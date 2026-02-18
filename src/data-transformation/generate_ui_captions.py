@@ -13,7 +13,7 @@ from utils import image_from_filepath
 client = genai.Client(
     vertexai=True,
     project="hybrid-cabinet-482822-p5",
-    location="us-east5"
+    location="global"
 ) 
 
 

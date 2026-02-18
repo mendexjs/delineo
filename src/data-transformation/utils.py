@@ -81,7 +81,7 @@ def crop_vins_status_bar(img, platform, orig_proportion):
     # Crop [y:h, x:w]
     return img[crop_top:height, 0:width]
 
-def load_ui_captions_map(jsonl_path = "./ui_captions_dataset.jsonl"):
+def load_ui_captions_map(jsonl_path):
     """
     Loads a JSONL file and maps 'filename' -> 'caption' exactly as written.
     """

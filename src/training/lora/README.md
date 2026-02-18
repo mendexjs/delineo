@@ -1,9 +1,41 @@
+### Setup
+Edit `lora-environment.yaml` and update `prefix` with your conda home path, and `HF_TOKEN` with your hugging face token
+
+```bash
+conda env create -f lora_env.yml
+conda activate lora
+python preprocess_dataset.py && python make_metadata.py
+```
+
+### Training
+```bash
+bash start_lora_training.sh
+```
+
+---
+
+### Epochs evaluation
+
+We have a script that runs inference with fixed seeds across all checkpoints to we can see how the outputs evolves and find the best checkpoint.
+
+We generate a batch of 5 images per validation pair, for 5 different samples across all epochs.
+The output is one image grid per sample, showing evolution across all checkpoints. View an example in `src/experiments/lora/epochs_evolution`.
+The script takes about 2 hours to run on an A100 80GB. You can adjust `PROMPT_BATCH_SIZE` according to your GPU resources.
+You can also add more validation examples or comment out to speed up the script.
+It's also possible to enable cpu offload to save VRAM by slowing down inference. Add `pipe.enable_model_cpu_offload()` after pipe instantiation.
+
+```bash
+cd ../../experiments && \
+python epochs_evaluation_script.py
+```
+
+---
+
 ### High quality UIs dataset for LoRA training
 
-This dataset was manually curated from different sources
+The LoRA dataset was manually curated from modern and clean mobile UI extracted from Figma free community design resources (https://www.figma.com/community/mobile-apps/ui?resource_type=mixed&editor_type=figma&price=free&sort_by=all_time)
 
-1. VINS Dataset (https://github.com/sbunian/VINS)
-2. Modern and clean mobile UI extracted from Figma community design resources (https://www.figma.com/community/mobile-apps/ui?resource_type=mixed&editor_type=figma&price=free&sort_by=all_time)
+Sources:
   - https://www.figma.com/community/file/1322236579213422290
   - https://www.figma.com/community/file/1143575071825582037
   - https://www.figma.com/community/file/882645007956337261
