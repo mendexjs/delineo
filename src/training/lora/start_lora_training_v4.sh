@@ -1,0 +1,22 @@
+accelerate launch --num_cpu_threads_per_process=8 diffusers/examples/dreambooth/train_dreambooth_lora_sd3.py \
+  --pretrained_model_name_or_path="stabilityai/stable-diffusion-3.5-large" \
+  --dataset_name="./dataset" \
+  --image_column="image" \
+  --caption_column="text" \
+  --instance_prompt="delineo-ui" \
+  --output_dir="/scratch/delineo_outputs/lora/delineo_lora_v4" \
+  --resolution=1024 \
+  --train_batch_size=2 \
+  --gradient_accumulation_steps=1 \
+  --learning_rate=5e-5 \
+  --text_encoder_lr=5e-6 \
+  --lr_scheduler="cosine" \
+  --lr_warmup_steps=150 \
+  --max_train_steps=2500 \
+  --rank=32 \
+  --train_text_encoder \
+  --dataloader_num_workers=8 \
+  --mixed_precision="bf16" \
+  --gradient_checkpointing \
+  --allow_tf32 \
+  --checkpointing_steps=250

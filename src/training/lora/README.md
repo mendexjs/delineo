@@ -1,4 +1,11 @@
 ### Setup
+
+We use diffusers lora training script for SD 3.5
+
+```bash
+cd src/training/lora && git clone git@github.com:huggingface/diffusers.git@f8d3db9ca7dc4bd15405269ae5d2744d0eb72658
+```
+
 Edit `lora-environment.yaml` and update `prefix` with your conda home path, and `HF_TOKEN` with your hugging face token
 
 ```bash
@@ -7,11 +14,14 @@ conda activate lora
 python preprocess_dataset.py && python make_metadata.py
 ```
 
+If you run in issues creating the environment from the yaml, follow the instructions in https://github.com/huggingface/diffusers/blob/f8d3db9ca7dc4bd15405269ae5d2744d0eb72658/examples/dreambooth/README_sd3.md
+
 ### Training
 ```bash
-bash start_lora_training.sh
+bash start_lora_training_v5.sh
 ```
 
+The version chosen was the V5 at 1000 steps: rank 64, lr 1e-4, encoder lr 1e-5.
 ---
 
 ### Epochs evaluation

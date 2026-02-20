@@ -15,7 +15,7 @@ current_directory = os.path.dirname(os.path.abspath(__file__))
 VINS_ROOT = Path(os.path.join(current_directory, "../raw-data/vins")) 
 
 OUTPUT_TRAIN_DIR = Path("/scratch/delineo_data/train/vins")
-OUTPUT_VALIDATION_DIR = Path("/scratch/delineo_data/validation/vins")
+OUTPUT_VALIDATION_DIR = Path("/scratch/delineo_data/validation")
 os.makedirs(OUTPUT_TRAIN_DIR, exist_ok=True)
 os.makedirs(OUTPUT_VALIDATION_DIR, exist_ok=True)
 
@@ -60,7 +60,7 @@ def draw_filled_rectangle(img, bounds):
     cv2.rectangle(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 
 def draw_image_placeholder(img, bounds):
-    draw_filled_rectangle(img, bounds)
+    draw_container_placeholder(img, bounds)
     cv2.line(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
     cv2.line(img, (bounds[0], bounds[3]), (bounds[2], bounds[1]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 

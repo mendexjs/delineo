@@ -64,7 +64,7 @@ def draw_filled_rectangle(img, bounds, _=None):
 
 def draw_image_placeholder(img, bounds, _=None):
     """Draw an X inside a rectangle"""
-    draw_filled_rectangle(img, bounds)
+    draw_container_placeholder(img, bounds)
     cv2.line(img, (bounds[0], bounds[1]), (bounds[2], bounds[3]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
     cv2.line(img, (bounds[0], bounds[3]), (bounds[2], bounds[1]), color=CONTRAST_COLOR, thickness=STROKE_WIDTH)
 

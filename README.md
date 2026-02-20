@@ -7,11 +7,12 @@ Edit `delineo-environment.yaml` and update `prefix` with your conda home path.
 If you plan to train the ControlNet, you also need to change the `HF_TOKEN` variable with your hugging face token.
 
 Create env from file: `conda env create -f delineo-environment.yml`
-Export env to a file: `conda export > delineo-environment.yaml`
 
-Activate the environment to run following steps:
-`conda activate delineo`
+Activate the environment and follow up dataset preparation for ControlNetTraining
 
+```bash
+conda activate delineo
+``` 
 ---
 
 # Training Setup
@@ -108,7 +109,7 @@ python prepare_training_metadata.py
 
 ### Training ControlNet
 
-The ControlNet training was done in a single NVIDIA Tesla A100 80gb. It took about 5 days to complete training.
+The ControlNet training was done in a single NVIDIA Tesla A100 80gb. It took about 76 hours to complete training.
 You might need install and use `tmux` to allow you have persistent terminal sessions in ssh and avoid training interruptions.
 
 ```bash
