@@ -3,35 +3,84 @@ from pathlib import Path
 import re
 import glob
 import time
+import json
+import torch
+import torch.nn.functional as F
 from datetime import datetime
 from typing import List, Tuple
 import argparse
 
-
-import torch
+import open_clip
 from PIL import Image, ImageDraw
 from tqdm import tqdm
 
 from diffusers import StableDiffusion3ControlNetPipeline, SD3ControlNetModel
 from diffusers.utils import load_image
 
+# --- Caminhos e Configurações ---
+ENCODER_PATH = "/scratch/delineo_outputs/encoder/ui_semantic_encoder_L14.pth"
+FIXED_LORA_PATH = "/scratch/delineo_outputs/lora/delineo_lora_v5/checkpoint-1000"
+CONTROLNET_ROOT_DIR = "/scratch/sd35-delineo-finetuned-v4"
 
-CUSTOM_CONTROLNET_PATH = "/scratch/delineo_outputs/controlnet-v3/checkpoint-4074/controlnet"
 TARGET_WIDTH = 720
 TARGET_HEIGHT = 1280
-PROMPT_BATCH_SIZE = 3 # 3 simultaneous is the max for A100 80GB without cpu offload
+PROMPT_BATCH_SIZE = 3
+DEVICE = "cuda"
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="LoRA evaluation script")
-    parser.add_argument(
-        "--version",
-        type=int,
-        required=True,
-        help="Adapter version number (e.g., 2, 3, 4...)"
-    )
-    return parser.parse_args()
+def chunked(lst, n):
+    for i in range(0, len(lst), n):
+        yield i, lst[i:i + n]
 
+def load_semantic_encoder(path):
+    model, _, preprocess = open_clip.create_model_and_transforms('ViT-L-14', pretrained='openai')
+    state_dict = torch.load(path, map_location=DEVICE)
+    model.load_state_dict(state_dict)
+    model.to(DEVICE)
+    model.eval()
+    return model, preprocess
 
+def get_similarity(model, preprocess, img1, img2):
+    with torch.no_grad():
+        im1 = preprocess(img1).unsqueeze(0).to(DEVICE)
+        im2 = preprocess(img2).unsqueeze(0).to(DEVICE)
+        feat1 = model.encode_image(im1)
+        feat2 = model.encode_image(im2)
+        feat1 /= feat1.norm(dim=-1, keepdim=True)
+        feat2 /= feat2.norm(dim=-1, keepdim=True)
+        return (feat1 @ feat2.T).item()
+
+def get_controlnet_checkpoints(root_dir: str) -> List[str]:
+    import glob
+    import os
+    import re
+    
+    # Busca todas as pastas de checkpoint na raiz
+    ckpt_dirs = glob.glob(os.path.join(root_dir, "checkpoint-*"))
+    valid_ckpts = []
+    
+    for d in ckpt_dirs:
+        # Força o caminho a apontar para a subpasta 'controlnet'
+        controlnet_path = os.path.join(d, "controlnet")
+        
+        # Verifica se o diretório do controlnet existe e contém os arquivos do modelo
+        if os.path.isdir(controlnet_path):
+            if os.path.exists(os.path.join(controlnet_path, "diffusion_pytorch_model.safetensors")) or \
+               os.path.exists(os.path.join(controlnet_path, "config.json")):
+                valid_ckpts.append(controlnet_path)
+                
+    # O regex continua funcionando pois vai encontrar "checkpoint-4740" no meio do caminho
+    valid_ckpts.sort(key=lambda x: int(re.search(r"checkpoint-(\d+)", x).group(1)) if re.search(r"checkpoint-(\d+)", x) else 10**18)
+    
+    return valid_ckpts
+
+def attach_sd35_large_pos_embed_if_needed(controlnet, transformer):
+    # Matches diffusers pipeline __init__ logic for SD3.5 Large controlnets
+    if hasattr(controlnet.config, "use_pos_embed") and controlnet.config.use_pos_embed is False:
+        pos_embed = controlnet._get_pos_embed_from_transformer(transformer)
+        controlnet.pos_embed = pos_embed.to(controlnet.dtype).to(controlnet.device)
+    return controlnet
+
+# --- Amostras de Validação ---
 base_dir = Path("../validation_samples")
 example_pairs: List[Tuple[str, str]] = [
     (f"{base_dir}/34216_2_input.png", "High-fidelity mobile UI, Airbnb-style, bright and airy aesthetic, pastel teal and white color palette. A search bar at the top reads 'Anywhere · Anytime · 1 guest'. Below, a segmented control with labels 'FOR YOU', 'HOMES', 'EXPERIENCES', 'PLACES', with 'EXPERIENCES' highlighted. A grid layout displays experience cards. The first card shows a wine tasting image, with text '$28 1 hour · wine & wine tasting'. The second card shows an art image, with text '$51 2 hours · art & painting'. A 'Filters' button is present. A bottom navigation bar includes icons and labels: 'EXPLORE', 'SAVED', 'TRIPS', 'INBOX', 'PROFILE'. Each card has a heart icon for saving."),
@@ -47,182 +96,112 @@ example_pairs: List[Tuple[str, str]] = [
 
 negative_prompt = "ugly, noisy, chaotic hierarchy, heavy skeuomorphism, broken layout, deformed, amputation, blurry text"
 
-test_seeds = [42, 1234, 777, 2001, 1994]
-adapter_weight = 0.7
-controlnet_conditioning_scale = 0.75
-num_inference_steps = 80
-guidance_scale = 5
-
-KEEP_PIPE_ON_GPU = True 
-
-
-def checkpoint_step(ckpt_path: str) -> int:
-    parent = os.path.basename(os.path.dirname(ckpt_path))
-    m = re.match(r"checkpoint-(\d+)", parent)
-    if m:
-        return int(m.group(1))
-    return 10**18  # "final" goes last
-
-
-def checkpoint_label(ckpt_path: str) -> str:
-    parent = os.path.basename(os.path.dirname(ckpt_path))
-    if parent.startswith("checkpoint-"):
-        return parent
-    return "final"
-
-
-def get_checkpoints(lora_dir: str) -> List[str]:
-    checkpoint_dirs = glob.glob(os.path.join(lora_dir, "checkpoint-*"))
-    files = []
-    for d in checkpoint_dirs:
-        p = os.path.join(d, "pytorch_lora_weights.safetensors")
-        if os.path.exists(p):
-            files.append(p)
-
-    root_final = os.path.join(lora_dir, "pytorch_lora_weights.safetensors")
-    if os.path.exists(root_final):
-        files.append(root_final)
-
-    files.sort(key=checkpoint_step)
-    return files
-
-
-def chunked(lst, n):
-    for i in range(0, len(lst), n):
-        yield i, lst[i:i + n]
-
 
 def create_grid(images: List[Image.Image], row_labels: List[str], col_labels: List[str]) -> Image.Image:
-    cols = len(col_labels)
-    rows = len(row_labels)
-    assert len(images) == rows * cols, f"Expected {rows*cols} images, got {len(images)}"
-
+    cols, rows = len(col_labels), len(row_labels)
     w, h = images[0].size
-    top_pad = 55
-    left_pad = 180
-    cell_pad = 6
-
+    top_pad, left_pad, cell_pad = 55, 180, 6
     grid_w = left_pad + cols * (w + cell_pad) + cell_pad
     grid_h = top_pad + rows * (h + cell_pad) + cell_pad
-
     grid = Image.new("RGB", (grid_w, grid_h), "white")
     draw = ImageDraw.Draw(grid)
-
-    # Column labels (seeds)
     for c, lab in enumerate(col_labels):
-        x = left_pad + cell_pad + c * (w + cell_pad) + 10
-        draw.text((x, 15), lab, fill="black")
-
-    # Rows
+        draw.text((left_pad + cell_pad + c * (w + cell_pad) + 10, 15), lab, fill="black")
     for r, rlab in enumerate(row_labels):
         y0 = top_pad + cell_pad + r * (h + cell_pad)
         draw.text((10, y0 + 10), rlab, fill="black")
         for c in range(cols):
-            idx = r * cols + c
-            x0 = left_pad + cell_pad + c * (w + cell_pad)
-            grid.paste(images[idx], (x0, y0))
-
+            grid.paste(images[r * cols + c], (left_pad + cell_pad + c * (w + cell_pad), y0))
     return grid
 
-
 def main():
-    args = parse_args()
-    version = args.version
-
-    LORA_DIR = f"/scratch/delineo_outputs/lora/delineo_lora_v{version}"
-    time_without_seconds = datetime.now().strftime("%d-%m_%H-%M")
-    OUTPUT_DIR = f"./lora_eval_v{version}_{time_without_seconds}"
+    time_str = datetime.now().strftime("%d-%m_%H-%M")
+    OUTPUT_DIR = f"./controlnet_eval_with_sim_{time_str}"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    checkpoint_files = get_checkpoints(LORA_DIR)
-    print(f"Found {len(checkpoint_files)} checkpoints to test.")
-    if not checkpoint_files:
-        raise RuntimeError(f"No checkpoints found in {LORA_DIR}")
-
+    # 1. Carregar Encoder e Checkpoints
+    encoder, encoder_tf = load_semantic_encoder(ENCODER_PATH)
+    ckpt_paths = get_controlnet_checkpoints(CONTROLNET_ROOT_DIR)
+    
     prompts = [p[1] for p in example_pairs]
     control_images = [load_image(p[0]) for p in example_pairs]
+    seed_labels = [f"seed {s}" for s in [42, 1234, 777, 2001, 1994]]
+    per_prompt_images = [[] for _ in prompts]
+    row_labels = []
 
-    seed_labels = [f"seed {s}" for s in test_seeds]
-
-    # one bucket per prompt: will accumulate rows*cols images (row-major across checkpoints)
-    per_prompt_images: List[List[Image.Image]] = [[] for _ in prompts]
-    row_labels: List[str] = []
-
-    # Load models once
-    controlnet = SD3ControlNetModel.from_pretrained(CUSTOM_CONTROLNET_PATH, torch_dtype=torch.bfloat16)
+    # 2. Setup do Pipeline SD3.5
+    controlnet = SD3ControlNetModel.from_pretrained(ckpt_paths[0], torch_dtype=torch.bfloat16)
     pipe = StableDiffusion3ControlNetPipeline.from_pretrained(
         "stabilityai/stable-diffusion-3.5-large",
         controlnet=controlnet,
         torch_dtype=torch.bfloat16,
-    ).to("cuda")
+    ).to(DEVICE)
     pipe.set_progress_bar_config(disable=True)
-    pipe.enable_xformers_memory_efficient_attention()
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.set_float32_matmul_precision("high")
-    # CPU offload slows down inference but allow to fit more in VRAM
-    # pipe.enable_model_cpu_offload()
-
-    # main loop: checkpoints -> prompt batches
-    for ckpt_path in tqdm(checkpoint_files, desc="Checkpoints"):
-        ckpt_name = checkpoint_label(ckpt_path)
-        row_labels.append(ckpt_name)
-        print(f"\nCheckpoint: {ckpt_name}")
+    
+    # Loop de Checkpoints
+    for ckpt_path in tqdm(ckpt_paths, desc="ControlNet Checkpoints"):
+        label = os.path.basename(ckpt_path) if "checkpoint-" in ckpt_path else "final"
+        row_labels.append(label)
+        new_cn = SD3ControlNetModel.from_pretrained(ckpt_path, torch_dtype=torch.bfloat16).to(DEVICE)
+        new_cn.eval()
+        new_cn = attach_sd35_large_pos_embed_if_needed(new_cn, pipe.transformer)
+        pipe.unload_lora_weights()
+        pipe.register_modules(controlnet=new_cn)
+        pipe.enable_xformers_memory_efficient_attention()
 
         pipe.load_lora_weights(
-            os.path.dirname(ckpt_path),
-            weight_name=os.path.basename(ckpt_path),
-            adapter_name="ui_style",
+            FIXED_LORA_PATH, 
+            weight_name="pytorch_lora_weights.safetensors", 
+            adapter_name="ui_style"
         )
-        pipe.set_adapters("ui_style", adapter_weights=[adapter_weight])
+        pipe.set_adapters("ui_style", adapter_weights=[0.7])
 
         for start_idx, batch_prompts in chunked(prompts, PROMPT_BATCH_SIZE):
             batch_controls = control_images[start_idx:start_idx + len(batch_prompts)]
-
-            # One generator per output image in this batch:
-            # batch_size = len(batch_prompts) * num_images_per_prompt
-            generators = []
-            for _p in range(len(batch_prompts)):
-                for s in test_seeds:
-                    generators.append(torch.Generator(device="cuda").manual_seed(s))
-
+            seeds = [42, 1234, 777, 2001, 1994]
+            generators = [torch.Generator(DEVICE).manual_seed(s) for _ in batch_prompts for s in seeds]
+            print(batch_prompts, batch_controls)
             with torch.inference_mode():
                 out = pipe(
                     prompt=batch_prompts,
                     negative_prompt=[negative_prompt] * len(batch_prompts),
                     control_image=batch_controls,
-                    controlnet_conditioning_scale=controlnet_conditioning_scale,
-                    num_inference_steps=num_inference_steps,
-                    guidance_scale=guidance_scale,
-                    num_images_per_prompt=len(test_seeds),
+                    controlnet_conditioning_scale=0.75,
+                    guidance_scale=5,
+                    num_inference_steps=50, # Reduzido para agilizar avaliação
+                    num_images_per_prompt=len(seeds),
                     generator=generators,
                     height=TARGET_HEIGHT,
                     width=TARGET_WIDTH,
                 ).images
 
-            # out is ordered by prompt, then images_per_prompt
-            cols = len(test_seeds)
+            # --- Cálculo de Similaridade e Anotação ---
             for local_p_idx in range(len(batch_prompts)):
                 global_p_idx = start_idx + local_p_idx
-                seg = out[local_p_idx * cols:(local_p_idx + 1) * cols]
-                per_prompt_images[global_p_idx].extend(seg)
+                original_sketch = control_images[global_p_idx]
+                
+                for s_idx in range(len(seeds)):
+                    gen_img = out[local_p_idx * len(seeds) + s_idx]
+                    
+                    # Calcular similaridade usando o encoder do seu TCC
+                    sim_score = get_similarity(encoder, encoder_tf, original_sketch, gen_img)
+                    
+                    # Escrever o score na imagem
+                    draw = ImageDraw.Draw(gen_img)
+                    # Retângulo de fundo para o texto
+                    draw.rectangle([(10, 10), (140, 50)], fill="black")
+                    draw.text((20, 15), f"Sim: {sim_score:.4f}", fill="white")
+                    
+                    per_prompt_images[global_p_idx].append(gen_img)
 
-            # free temporary tensors quicker
-            del out
             torch.cuda.empty_cache()
 
-        pipe.unload_lora_weights()
-        torch.cuda.empty_cache()
-
-    # Save one file per prompt: rows=checkpoints, cols=seeds
+    # Salvar Grids
     for i, imgs in enumerate(per_prompt_images):
         grid = create_grid(imgs, row_labels=row_labels, col_labels=seed_labels)
-        out_path = os.path.join(OUTPUT_DIR, f"prompt_{i:02d}_across_checkpoints.png")
-        grid.save(out_path)
-        print(f"✅ Saved: {out_path}")
-
+        grid.save(os.path.join(OUTPUT_DIR, f"prompt_{i:02d}_eval.png"))
 
 if __name__ == "__main__":
-    start = time.perf_counter()
     main()
-    elapsed = time.perf_counter() - start
-    print(f"\nTotal generation time: {int(elapsed//60)}m {elapsed%60:.2f}s")
