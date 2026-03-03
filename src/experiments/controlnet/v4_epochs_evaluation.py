@@ -94,7 +94,7 @@ example_pairs: List[Tuple[str, str]] = [
     (f"{base_dir}/1904_1_input.png", "High-fidelity mobile UI, modern music streaming app, light mode, neutral color palette with red accents. The screen features a search bar at the top with the text 'Search and Discover new Music!'. Below is a hero image featuring the artist 'POUYA' and the text 'EXCLUSIVE INTERVIEW OUT NOW! CHARM LADONNA'. A 'Trending Singles' section follows with a 'SEE MORE' link. The list view displays song titles and artist names, such as 'Lil Durk - They Forgot [Prod. By Le...]', accompanied by small album art thumbnails. A bottom navigation bar includes icons for Discover, History, Trending, Video, and Library."),
 ]
 
-negative_prompt = "ugly, noisy, chaotic hierarchy, heavy skeuomorphism, broken layout, deformed, amputation, blurry text"
+negative_prompt = "ugly, noisy, chaotic hierarchy, heavy skeuomorphism, broken layout, deformed, blurry text, noisy text, phone frame, deformed body, disfigured, poorly drawn face, bad anatomy, extra limbs, missing limbs, floating limbs, grid, collage, tiny text, mutation, mutated, disgusting, amputation, tiling, low quality, unnatural, unprofessional, poorly composed, disconnected limbs"
 
 
 def create_grid(images: List[Image.Image], row_labels: List[str], col_labels: List[str]) -> Image.Image:
@@ -142,21 +142,23 @@ def main():
     
     # Loop de Checkpoints
     for ckpt_path in tqdm(ckpt_paths, desc="ControlNet Checkpoints"):
-        label = os.path.basename(ckpt_path) if "checkpoint-" in ckpt_path else "final"
+        parent = Path(ckpt_path).parent.name  # e.g. "checkpoint-4740"
+        m = re.search(r"checkpoint-(\d+)", parent)
+        label = f"controlnet-{m.group(1)}" if m else "controlnet-final"
         row_labels.append(label)
         new_cn = SD3ControlNetModel.from_pretrained(ckpt_path, torch_dtype=torch.bfloat16).to(DEVICE)
         new_cn.eval()
         new_cn = attach_sd35_large_pos_embed_if_needed(new_cn, pipe.transformer)
-        pipe.unload_lora_weights()
+        # pipe.unload_lora_weights()
         pipe.register_modules(controlnet=new_cn)
         pipe.enable_xformers_memory_efficient_attention()
 
-        pipe.load_lora_weights(
-            FIXED_LORA_PATH, 
-            weight_name="pytorch_lora_weights.safetensors", 
-            adapter_name="ui_style"
-        )
-        pipe.set_adapters("ui_style", adapter_weights=[0.7])
+        # pipe.load_lora_weights(
+        #     FIXED_LORA_PATH, 
+        #     weight_name="pytorch_lora_weights.safetensors", 
+        #     adapter_name="ui_style"
+        # )
+        # pipe.set_adapters("ui_style", adapter_weights=[0.5])
 
         for start_idx, batch_prompts in chunked(prompts, PROMPT_BATCH_SIZE):
             batch_controls = control_images[start_idx:start_idx + len(batch_prompts)]
@@ -168,9 +170,9 @@ def main():
                     prompt=batch_prompts,
                     negative_prompt=[negative_prompt] * len(batch_prompts),
                     control_image=batch_controls,
-                    controlnet_conditioning_scale=0.75,
-                    guidance_scale=5,
-                    num_inference_steps=50, # Reduzido para agilizar avaliação
+                    controlnet_conditioning_scale=0.85,
+                    guidance_scale=4,
+                    num_inference_steps=80,
                     num_images_per_prompt=len(seeds),
                     generator=generators,
                     height=TARGET_HEIGHT,

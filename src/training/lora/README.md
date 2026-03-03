@@ -18,10 +18,10 @@ If you run in issues creating the environment from the yaml, follow the instruct
 
 ### Training
 ```bash
-bash start_lora_training_v5.sh
+bash start_lora_training.sh
 ```
 
-The version chosen was the V5 at 1000 steps: rank 64, lr 1e-4, encoder lr 1e-5.
+We tested different rank, learning rate and bach sizes. The preferred version is the checkpoint of 1000 steps: rank 64, lr 1e-4, encoder lr 1e-5.
 ---
 
 ### Epochs evaluation
