@@ -149,16 +149,16 @@ def main():
         new_cn = SD3ControlNetModel.from_pretrained(ckpt_path, torch_dtype=torch.bfloat16).to(DEVICE)
         new_cn.eval()
         new_cn = attach_sd35_large_pos_embed_if_needed(new_cn, pipe.transformer)
-        # pipe.unload_lora_weights()
+        pipe.unload_lora_weights()
         pipe.register_modules(controlnet=new_cn)
         pipe.enable_xformers_memory_efficient_attention()
 
-        # pipe.load_lora_weights(
-        #     FIXED_LORA_PATH, 
-        #     weight_name="pytorch_lora_weights.safetensors", 
-        #     adapter_name="ui_style"
-        # )
-        # pipe.set_adapters("ui_style", adapter_weights=[0.5])
+        pipe.load_lora_weights(
+            FIXED_LORA_PATH, 
+            weight_name="pytorch_lora_weights.safetensors", 
+            adapter_name="ui_style"
+        )
+        pipe.set_adapters("ui_style", adapter_weights=[0.5])
 
         for start_idx, batch_prompts in chunked(prompts, PROMPT_BATCH_SIZE):
             batch_controls = control_images[start_idx:start_idx + len(batch_prompts)]

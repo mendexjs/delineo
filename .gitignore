@@ -11,3 +11,4 @@ notarycli
 **/diffusers
 src/training/lora/dataset
 src/training/.checkpoints
+client_secret.json
