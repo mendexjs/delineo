@@ -23,7 +23,7 @@ pipe = StableDiffusion3ControlNetPipeline.from_pretrained(
 pipe.to("cuda")
 
 # 2. INPUT
-control_image_path_1 = "./validation_samples/408_input.png"
+control_image_path_1 = "../validation_samples/408_input.png"
 control_image_1 = load_image(control_image_path_1)
 prompt_1 = "High-fidelity mobile UI design of a registration screen. Features a prominent 'EasyBox' logo in blue and orange at the top. Below is a stacked form with input fields for Name, Email, Password, and Confirm Password. Includes a Terms of Use agreement checkbox and a solid blue primary submit button. Clean, trustworthy aesthetic with blue accents."
 print("Generating IMG 1...")
@@ -37,7 +37,7 @@ image_1 = pipe(
 ).images[0]
 
 
-control_image_path_2 = "./validation_samples/4240_1_input.png"
+control_image_path_2 = "../validation_samples/4240_1_input.png"
 control_image_2 = load_image(control_image_path_2)
 prompt_2 = "High-fidelity mobile UI design of the H&M app main page. Features a hero carousel with fashion trends, navigation for 'Women' and 'Men' categories, and a bright promotional banner displaying 'Last Day of Festival Shop - 50% OFF'. Minimalist, modern e-commerce aesthetic."
 print("Generating IMG 2...")

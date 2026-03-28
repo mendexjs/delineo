@@ -1,5 +1,6 @@
 import os
 import json
+import random
 import time
 from PIL import Image
 from tqdm import tqdm
@@ -24,31 +25,37 @@ MAX_RETRIES = 15
 N_JOBS = 4
 
 SYSTEM_INSTRUCTION = """
-You are an expert UI/UX designer creating training captions for a mobile UI generation model.
-Your task is to analyze the provided mobile screenshot and write a concise, professional prompt that a working product designer would naturally write to describe the interface, focusing on its structure, components, and overall context. Do NOT attempt to transcribe text that appears blurry, distorted, or nonsensical; instead, describe its presence, placement, and general purpose.
+You are an expert UI/UX designer creating training captions for a mobile UI generation model. 
+Your task is to analyze the provided mobile screenshot and write a concise, professional prompt that a working product designer would naturally write to describe the interface. 
 
-CRITICAL ARCHITECTURE RULE:
+**CRITICAL ARCHITECTURE RULE:**
 Your output MUST be strictly divided into two logical halves:
+1.  **The Aesthetic Prefix (First ~20-40 words):** Global style, theme, color palette, and overall visual trend. 
+2.  **The Component Body (Remaining words):** The layout and UI components described using standard industry terminology, natural phrasing, and key text values.
 
-The Aesthetic Prefix (First ~20-40 words): Global style, theme, color palette, and overall visual trend.
-The Component Body (Remaining words): The layout and UI components described using standard industry terminology, natural phrasing, and the presence and purpose of key text elements.
-Strict Output Rules:
+**Strict Output Rules:**
+1.  **Start:** Always start with "High-fidelity mobile UI, [Theme/Vibe], [Color Palette]..."
+2.  **Length & Flow:** Be concise and natural (approx. 50-120 words max). Do not over-describe every pixel. Use professional shorthand and focus on the visual hierarchy.
 
-Start: Always start with "High-fidelity mobile UI, [Theme/Vibe], [Color Palette]..." 
-Length & Flow: Be concise and natural (approx. 50-120 words max). Do not over-describe every pixel. Use professional shorthand and focus on the visual hierarchy.
-Content Guidelines for Canny ControlNet:
-The Canny map will provide the spatial lines. Your prompt MUST provide the component names, fills, and describe the presence and general nature of key text elements.
+**Content Guidelines for Canny ControlNet:**
+The Canny map will provide the spatial lines. Your prompt MUST provide the component names, fills, and key text.
+* **Designer Vocabulary:** Use terms like: hero image, primary CTA, secondary button, bottom nav, FAB, modal, card component, list view, segmented control, whitespace, padding, elevation, drop shadow, opacity.
+* **Colors & Materials:** Use clear, professional descriptors ("matte dark mode," "glassmorphism," "muted gray," "accent primary color").
+* **Exact Text Rendering:** If prominent text exists (like headers or CTAs), enclose it in single quotes (e.g., CTA 'Sign Up').
+* **Imagery:** Briefly state what the placeholder images represent (e.g., "avatar," "lifestyle hero image").
 
-Designer Vocabulary: Use terms like: hero image, primary CTA, secondary button, bottom nav, FAB, modal, card component, list view, segmented control, whitespace, padding, elevation, drop shadow, opacity.
-Colors & Materials: Use clear, professional descriptors ("matte dark mode," "glassmorphism," "muted gray," "accent primary color").
-Text Elements: Describe the presence, placement, and general purpose of text elements (e.g., 'a prominent title', 'body text below a button', 'a numerical price tag'). Do NOT attempt to transcribe text that appears blurry, distorted, or nonsensical. Focus on the structural role of text within the UI.
-Imagery: Briefly state what the placeholder images represent (e.g., "avatar," "lifestyle hero image").
+**Example (Simple UI):**
+High-fidelity mobile UI, ultra-minimalist dark mode aesthetic, flat design, high contrast. A clean login screen with generous whitespace and a strong visual hierarchy. Center stage is a stark white text field for 'Email Address', sitting just above a pill-shaped primary CTA in electric lime reading 'Enter'. The top-center features a minimal geometric triangle logo. Flat elevation with no drop shadows.
+
+**Example (Complex UI):**
+High-fidelity mobile UI, modern travel aesthetic, airy lighting, glassmorphism elements, clean white background with soft yellow accents. A travel discovery feed featuring a transparent header overlapping a full-width nature hero image. Below is a frosted glass search bar with a 'Filter' icon. A horizontal scrollable section contains circular 'Story' avatars with gradient borders. The main vertical list view uses large, rounded-corner card components. A sample card shows a forest photo, bold serif title 'Alpine Lodge', a yellow star rating badge, and a bottom-right price tag '$120/night'. A minimalist line-art bottom nav includes Home, Search, Saved, Profile.
 """
 
 def process_single_seed(client, pil_image, seed_val):
+    time.sleep(random.uniform(0.1, 0.5)) # Mitigate concurrency
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_INSTRUCTION,
-        temperature=0.2,
+        temperature=0.5,
         top_p=0.9,
         max_output_tokens=256,
         seed=seed_val 
@@ -74,11 +81,12 @@ def process_single_seed(client, pil_image, seed_val):
                 time.sleep(sleep_time)
             elif "invalid_grant" in error_msg:
                 # Erro fatal de autenticação
-                return {"seed": seed_val, "generated_caption": None, "error": "AUTH_EXPIRED"}
+                raise Exception(error_msg)
             else:
                 time.sleep(2)
                 
         except Exception as e:
+            print(e)
             time.sleep(2)
             
     return {"seed": seed_val, "generated_caption": None, "error": "MAX_RETRIES_EXCEEDED"}

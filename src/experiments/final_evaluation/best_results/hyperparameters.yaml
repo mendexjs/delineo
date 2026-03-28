@@ -1,0 +1,26 @@
+JSONL_PATH: ../ui_validation_captions.jsonl
+CONTROLNET_PATH: /scratch/delineo_final/controlnet
+LORA_PATH: /scratch/delineo_final/lora
+TARGET_WIDTH: 720
+TARGET_HEIGHT: 1280
+NUM_INFERENCE_STEPS: 100
+GUIDANCE_SCALE: 5
+CONTROLNET_CONDITIONING_SCALE: 0.7
+LORA_SCALE: 0.8
+SEEDS:
+- 42
+- 1234
+- 777
+- 2001
+- 1994
+- 8080
+- 5555
+- 9999
+- 1111
+- 3333
+NEGATIVE_PROMPT: ugly, noisy, chaotic hierarchy, heavy skeuomorphism, broken layout,
+  deformed, blurry text, noisy text, phone frame, deformed body, disfigured, poorly
+  drawn face, bad anatomy, extra limbs, missing limbs, floating limbs, grid, collage,
+  tiny text, mutation, mutated, disgusting, amputation, tiling, low quality, unnatural,
+  unprofessional, poorly composed, disconnected limbs
+EXECUTION_TIME: '2026-03-15 00:26:52'

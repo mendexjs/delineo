@@ -12,3 +12,5 @@ notarycli
 src/training/lora/dataset
 src/training/.checkpoints
 client_secret.json
+
+**/delineo_final_eval*

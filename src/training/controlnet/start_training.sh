@@ -23,3 +23,4 @@ accelerate launch --dynamo_backend="no" train_controlnet_sd3.py \
   --checkpoints_total_limit=5 \
   --mixed_precision="bf16" \
   --report_to="tensorboard"
+  # best checkpoint was 7110 steps (18th epoch)

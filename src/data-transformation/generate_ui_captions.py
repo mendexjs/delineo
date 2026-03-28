@@ -60,8 +60,9 @@ High-fidelity mobile UI, modern travel aesthetic, airy lighting, glassmorphism e
 """
 
 generation_config = types.GenerateContentConfig(
-    temperature=0.3,
+    temperature=0.5,
     max_output_tokens=256,
+    top_p=0.9,
     system_instruction=SYSTEM_INSTRUCTION,
     safety_settings=[
         types.SafetySetting(
@@ -107,7 +108,7 @@ def process_single_image(full_path):
         try:
             response = client.models.generate_content(
                 model="gemini-2.0-flash",
-                contents=[image], 
+                contents=[image, "Describe this mobile UI according to the system instructions."], 
                 config=generation_config
             )
             
@@ -177,7 +178,7 @@ def main():
     for i in range(0, len(files_to_process), BATCH_SIZE):
         batch_paths = files_to_process[i : i + BATCH_SIZE]
         
-        batch_results = Parallel(n_jobs=N_JOBS, prefer="threads")(
+        batch_results = Parallel(n_jobs=N_JOBS, prefer="threading")(
             delayed(process_single_image)(p) for p in tqdm(batch_paths, desc=f"Batch {i//BATCH_SIZE + 1}", leave=False)
         )
         
